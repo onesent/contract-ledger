@@ -1,32 +1,16 @@
 schema: spec-driven
 
 # Project context (optional)
-# Add only constraints that should guide OpenSpec artifacts and workflows.
-# Include constraints an agent cannot infer by reading the code.
-# Keep general project documentation and discoverable codebase facts out.
-# Example:
-#   context: |
-#     Designs and tasks must cover Windows, macOS, and Linux
-#     Write all artifacts in Spanish
+# 项目硬约束（交付形态、语言、目录与数据流）维护在仓库根目录 AGENTS.md，这里不重复。
+# 此处只放 OpenSpec 工作流特有的约定——context 会被注入 proposal / specs / design / tasks / apply / archive 全部指令。
+context: |
+  变更记录：每次变更在变更目录内维护专属 changelog.md（openspec/changes/<change>/changelog.md），
+  记录背景、关键决策（含被否决方案与理由）、影响面、兼容与回滚、遗留问题；
+  它随变更整体移入 changes/archive/，不复制进 specs/；
+  纯工具链、构建或文案变更无方案级决策时可省略。
 
 # Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always state what is out of scope
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+# 各构件沿用默认 spec-driven 指令，无覆盖（变更记录约定已在 context 中统一注入）。
 
 # Per-operation guidance (optional)
-# Add advisory guidance for how apply and archive work should be conducted.
-# This is separate from artifact rules above.
-# Example:
-#   operations:
-#     apply:
-#       guidance:
-#         - Keep test summaries concise
-#     archive:
-#       guidance:
-#         - Summarize the archive outcome before finishing
+# 归档前置条件（tasks 完成、validate 通过）由 archive 命令自身强制，无需在此重复。
