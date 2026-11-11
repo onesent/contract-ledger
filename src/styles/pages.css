@@ -1,0 +1,623 @@
+/* 页面级样式：仅做布局与视觉微调，交互能力全部来自 Element Plus */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.page-head-text {
+  min-width: 0;
+  flex: 1 1 260px;
+}
+
+.page-title {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.page-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ledger-muted);
+  line-height: 1.6;
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.card-header-title {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.card-header-spacer {
+  flex: 1 1 auto;
+}
+
+.muted {
+  color: var(--ledger-muted);
+}
+
+.small {
+  font-size: 12px;
+}
+
+.text-danger {
+  color: var(--ledger-danger);
+}
+
+.text-success {
+  color: var(--ledger-success);
+}
+
+.text-warning {
+  color: var(--ledger-warning);
+}
+
+.mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 统计卡 ---------- */
+.stat-grid {
+  row-gap: 12px;
+}
+
+.stat-card {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  height: 100%;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--el-box-shadow-light);
+}
+
+.stat-card .el-card__body {
+  padding: 14px 16px;
+}
+
+.stat-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ledger-muted);
+  margin-bottom: 6px;
+}
+
+.stat-value {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  word-break: break-all;
+}
+
+.stat-value.is-money {
+  font-size: 20px;
+}
+
+.stat-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--ledger-muted);
+  line-height: 1.5;
+}
+
+.stat-hint .el-icon {
+  vertical-align: -2px;
+}
+
+/* ---------- 工具栏 / 筛选 ---------- */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.toolbar-spacer {
+  flex: 1 1 auto;
+}
+
+.filter-card .el-card__body {
+  padding: 14px 16px 2px;
+}
+
+.filter-form .el-form-item {
+  margin-bottom: 12px;
+}
+
+.filter-form .el-input,
+.filter-form .el-select {
+  width: 180px;
+}
+
+.filter-form .el-input.is-range-input {
+  width: 120px;
+}
+
+.filter-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.filter-tag {
+  font-variant-numeric: tabular-nums;
+}
+
+.selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary-dark-2);
+  font-size: 13px;
+}
+
+/* ---------- 表格 ---------- */
+.table-card .el-card__body {
+  padding: 0;
+}
+
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.money-cell {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.money-cell.is-unpaid {
+  color: var(--ledger-danger);
+}
+
+.row-overdue > td.el-table__cell {
+  background: rgba(217, 83, 79, 0.06);
+}
+
+.row-due-soon > td.el-table__cell {
+  background: rgba(217, 147, 47, 0.07);
+}
+
+.cell-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 120px;
+}
+
+.cell-progress .el-progress {
+  flex: 1 1 auto;
+  min-width: 60px;
+}
+
+.cell-progress-text {
+  font-size: 12px;
+  color: var(--ledger-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 42px;
+  text-align: right;
+}
+
+.cell-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: nowrap;
+}
+
+.cell-actions .el-button {
+  padding: 4px 6px;
+  margin-left: 0;
+}
+
+.pagination-bar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 16px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
+/* ---------- 合同详情 / 表单 ---------- */
+.detail-section {
+  margin-bottom: 16px;
+}
+
+.detail-section h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.timeline-card {
+  padding: 4px 0;
+}
+
+.timeline-item-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.timeline-amount {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ledger-success);
+}
+
+.form-upload-note {
+  font-size: 12px;
+  color: var(--ledger-muted);
+  line-height: 1.6;
+  margin: 4px 0 8px;
+}
+
+.progress-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.progress-preview .el-progress {
+  flex: 1 1 auto;
+}
+
+.readonly-field .el-input__wrapper {
+  background: var(--el-fill-color-light);
+}
+
+.derived-hint {
+  font-size: 12px;
+  color: var(--ledger-muted);
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
+/* ---------- 提醒清单 ---------- */
+.reminder-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.reminder-group {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fbfcfe;
+}
+
+.reminder-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.reminder-head .reminder-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.reminder-head .reminder-desc {
+  font-size: 12px;
+  color: var(--ledger-muted);
+}
+
+.reminder-items {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.reminder-items li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 5px 0;
+  border-top: 1px dashed var(--el-border-color-lighter);
+  font-size: 13px;
+}
+
+.reminder-items li:first-child {
+  border-top: none;
+}
+
+.reminder-items .el-button {
+  padding: 0;
+  height: auto;
+  font-size: 13px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reminder-empty-line {
+  font-size: 12px;
+  color: var(--ledger-muted);
+  margin-top: 6px;
+}
+
+/* ---------- 图表 ---------- */
+.chart-panel {
+  height: 100%;
+}
+
+.chart-panel .el-card__body {
+  padding: 10px 12px 14px;
+}
+
+.chart-canvas {
+  width: 100%;
+  min-height: 240px;
+}
+
+.chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+}
+
+/* ---------- 移动端卡片布局 ---------- */
+.mobile-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mobile-card {
+  border-radius: 8px;
+}
+
+.mobile-card .el-card__body {
+  padding: 12px;
+}
+
+.mobile-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.mobile-card-title {
+  font-weight: 600;
+  font-size: 14px;
+  word-break: break-all;
+}
+
+.mobile-card-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.mobile-card-actions .el-button {
+  margin-left: 0;
+}
+
+.mobile-empty {
+  padding: 12px 0;
+}
+
+/* ---------- 设置页 ---------- */
+.settings-card .el-card__body {
+  padding-top: 16px;
+}
+
+.settings-form {
+  max-width: 760px;
+}
+
+.settings-form .el-input-number {
+  width: 180px;
+}
+
+.settings-form .el-input {
+  max-width: 420px;
+}
+
+.form-tip {
+  font-size: 12px;
+  color: var(--ledger-muted);
+  line-height: 1.6;
+  margin: 4px 0 0;
+}
+
+.section-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+/* ---------- 字典 ---------- */
+.dict-color-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tab-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dict-tabs-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+/* ---------- AI ---------- */
+.ai-card .el-card__body {
+  padding-top: 14px;
+}
+
+.ai-query-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ai-query-row .el-input {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.ai-hint {
+  font-size: 12px;
+  color: var(--ledger-muted);
+  line-height: 1.6;
+  margin-top: 8px;
+}
+
+/* ---------- 存储状态 ---------- */
+.storage-status-compact {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.storage-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  background: var(--el-color-success);
+}
+
+.storage-dot.is-warning {
+  background: var(--el-color-warning);
+}
+
+.storage-dot.is-danger {
+  background: var(--el-color-danger);
+}
+
+.storage-counts {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.storage-counts b {
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 1023px) {
+  .page-title {
+    font-size: 18px;
+  }
+
+  .stat-value {
+    font-size: 19px;
+  }
+
+  .stat-value.is-money {
+    font-size: 17px;
+  }
+
+  .filter-form .el-input,
+  .filter-form .el-select,
+  .filter-form .el-date-editor {
+    width: 100%;
+  }
+
+  .filter-form .el-form-item {
+    width: 100%;
+    margin-right: 0;
+  }
+
+  .filter-form .el-form-item__content {
+    width: 100%;
+  }
+
+  .filter-form .el-form-item__content > * {
+    width: 100%;
+  }
+
+  .pagination-bar {
+    justify-content: center;
+    padding: 10px 8px;
+  }
+
+  .pagination-bar .el-pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 6px;
+  }
+
+  .toolbar .el-button {
+    margin-left: 0;
+  }
+
+  .settings-form .el-input-number,
+  .settings-form .el-input {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .stat-card .el-card__body {
+    padding: 12px;
+  }
+
+  .reminder-items li {
+    gap: 6px;
+  }
+
+  .cell-actions {
+    flex-wrap: wrap;
+  }
+}

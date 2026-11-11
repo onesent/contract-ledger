@@ -1,0 +1,77 @@
+/* Element Plus 主题变量覆盖：只改 CSS 变量，不修改组件库源码 */
+:root {
+  --el-font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'WenQuanYi Micro Hei', 'Noto Sans CJK SC', sans-serif;
+
+  --el-color-primary: #2f6feb;
+  --el-color-primary-light-3: #6b96f2;
+  --el-color-primary-light-5: #97b6f6;
+  --el-color-primary-light-7: #c2d4fa;
+  --el-color-primary-light-8: #d7e3fc;
+  --el-color-primary-light-9: #ecf2fe;
+  --el-color-primary-dark-2: #2659bc;
+
+  --el-color-success: #2f9e63;
+  --el-color-success-light-9: #ecf8f1;
+  --el-color-warning: #d9932f;
+  --el-color-warning-light-9: #fdf6ea;
+  --el-color-danger: #d9534f;
+  --el-color-danger-light-9: #fdeeee;
+  --el-color-info: #6b7280;
+
+  --el-text-color-primary: #1f2937;
+  --el-text-color-regular: #4b5563;
+  --el-text-color-secondary: #6b7280;
+  --el-text-color-placeholder: #9aa3af;
+
+  --el-border-color: #dfe5ee;
+  --el-border-color-light: #e8edf5;
+  --el-border-color-lighter: #eef2f8;
+  --el-fill-color-light: #f6f8fb;
+  --el-fill-color-blank: #ffffff;
+  --el-bg-color: #ffffff;
+  --el-bg-color-page: #f2f5f9;
+
+  --el-border-radius-base: 6px;
+  --el-box-shadow-light: 0 2px 12px rgba(15, 30, 60, 0.06);
+
+  --ledger-shell-bg: #f2f5f9;
+  --ledger-aside-bg: #0f1f3a;
+  --ledger-aside-text: #c8d5ea;
+  --ledger-aside-active-bg: rgba(47, 111, 235, 0.22);
+  --ledger-card-bg: #ffffff;
+  --ledger-muted: #6b7280;
+  --ledger-danger: #d9534f;
+  --ledger-success: #2f9e63;
+  --ledger-warning: #d9932f;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background: var(--ledger-shell-bg);
+  color: var(--el-text-color-primary);
+  font-family: var(--el-font-family);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+a {
+  color: var(--el-color-primary);
+}
+
+/* 键盘焦点可见 */
+:focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 2px;
+}
+
+.el-button:focus-visible {
+  outline-offset: 2px;
+}
