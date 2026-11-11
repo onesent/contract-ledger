@@ -1,0 +1,383 @@
+{
+  "app": "contract-ledger",
+  "schemaVersion": 1,
+  "exportedAt": "2026-10-01T08:00:00.000Z",
+  "data": {
+    "contracts": [
+      {
+        "id": "c0000000-0000-4000-8000-000000000001",
+        "no": "HT-202408-001",
+        "customer": "星海科技有限公司",
+        "typeCode": "sales",
+        "amount": 480000,
+        "receivedAmount": 480000,
+        "paymentDate": "2024-10-20",
+        "signDate": "2024-08-12",
+        "startDate": "2024-08-12",
+        "dueDate": "2025-08-11",
+        "statusCode": "finished",
+        "ownerId": "p0000000-0000-4000-8000-000000000001",
+        "ownerName": "张伟",
+        "statusChangedAt": "2025-08-15T02:30:00.000Z",
+        "note": "v1 备份：已全额回款但没有任何资金流水行，用于验证 opening_paid_cents 归档。",
+        "attachments": [],
+        "statusLogs": [
+          {
+            "id": "log-001",
+            "from": "executing",
+            "to": "finished",
+            "at": "2025-08-15T02:30:00.000Z",
+            "by": "系统初始化"
+          }
+        ],
+        "createdAt": "2024-08-12T01:00:00.000Z",
+        "updatedAt": "2025-08-15T02:30:00.000Z"
+      },
+      {
+        "id": "c0000000-0000-4000-8000-000000000002",
+        "no": "HT-202409-002",
+        "customer": "华美办公家具制造有限公司",
+        "typeCode": "purchase",
+        "amount": 300000,
+        "receivedAmount": 200000,
+        "paymentDate": "2026-10-01",
+        "signDate": "2026-06-01",
+        "startDate": "2026-06-01",
+        "dueDate": "2026-12-31",
+        "statusCode": "executing",
+        "ownerId": "p0000000-0000-4000-8000-000000000002",
+        "ownerName": "李娜",
+        "statusChangedAt": "2026-06-02T00:00:00.000Z",
+        "note": "v1 备份：typeCode=purchase，导入时按旧规则推断为采购方向；4 笔付款合计 200000。",
+        "attachments": [],
+        "statusLogs": [
+          {
+            "id": "log-002",
+            "from": "draft",
+            "to": "executing",
+            "at": "2026-06-02T00:00:00.000Z",
+            "by": "系统初始化"
+          }
+        ],
+        "createdAt": "2026-06-01T00:00:00.000Z",
+        "updatedAt": "2026-11-01T00:00:00.000Z"
+      },
+      {
+        "id": "c0000000-0000-4000-8000-000000000003",
+        "no": "HT-202501-003",
+        "customer": "明远教育集团",
+        "typeCode": "service",
+        "amount": 0,
+        "receivedAmount": 0,
+        "paymentDate": "",
+        "signDate": "2026-01-05",
+        "startDate": "2026-02-01",
+        "dueDate": "2026-01-31",
+        "statusCode": "finished",
+        "ownerId": "p0000000-0000-4000-8000-000000000003",
+        "ownerName": "王强",
+        "statusChangedAt": "2026-02-10T00:00:00.000Z",
+        "note": "v1 备份：零金额公益合同；开始日期晚于到期日，属于故意保留的旧数据质量异常。",
+        "attachments": [],
+        "statusLogs": [
+          {
+            "id": "log-003",
+            "from": "executing",
+            "to": "finished",
+            "at": "2026-02-10T00:00:00.000Z",
+            "by": "系统初始化"
+          }
+        ],
+        "createdAt": "2026-01-05T00:00:00.000Z",
+        "updatedAt": "2026-02-10T00:00:00.000Z"
+      }
+    ],
+    "payments": [
+      {
+        "id": "pay-0001",
+        "contractId": "c0000000-0000-4000-8000-000000000002",
+        "amount": 120000,
+        "date": "2026-07-01",
+        "methodCode": "transfer",
+        "note": "首付款",
+        "createdAt": "2026-07-01T03:00:00.000Z",
+        "updatedAt": "2026-07-01T03:00:00.000Z"
+      },
+      {
+        "id": "pay-0002",
+        "contractId": "c0000000-0000-4000-8000-000000000002",
+        "amount": 40000,
+        "date": "2026-08-01",
+        "methodCode": "transfer",
+        "note": "二期款",
+        "createdAt": "2026-08-01T03:00:00.000Z",
+        "updatedAt": "2026-08-01T03:00:00.000Z"
+      },
+      {
+        "id": "pay-0003",
+        "contractId": "c0000000-0000-4000-8000-000000000002",
+        "amount": 25000,
+        "date": "2026-09-01",
+        "methodCode": "cash",
+        "note": "到货款",
+        "createdAt": "2026-09-01T03:00:00.000Z",
+        "updatedAt": "2026-09-01T03:00:00.000Z"
+      },
+      {
+        "id": "pay-0004",
+        "contractId": "c0000000-0000-4000-8000-000000000002",
+        "amount": 15000,
+        "date": "2026-10-01",
+        "methodCode": "transfer",
+        "note": "尾款",
+        "createdAt": "2026-10-01T03:00:00.000Z",
+        "updatedAt": "2026-10-01T03:00:00.000Z"
+      }
+    ],
+    "personnel": [
+      {
+        "id": "p0000000-0000-4000-8000-000000000001",
+        "code": "YG-001",
+        "name": "张伟",
+        "deptCode": "sales",
+        "position": "销售经理",
+        "phone": "13800000001",
+        "email": "zhangwei@example.com",
+        "active": true,
+        "hireDate": "2021-03-01",
+        "note": "负责重点客户",
+        "createdAt": "2025-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z"
+      },
+      {
+        "id": "p0000000-0000-4000-8000-000000000002",
+        "code": "YG-002",
+        "name": "李娜",
+        "deptCode": "sales",
+        "position": "采购专员",
+        "phone": "13800000002",
+        "email": "lina@example.com",
+        "active": true,
+        "hireDate": "2022-07-15",
+        "note": "",
+        "createdAt": "2025-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z"
+      },
+      {
+        "id": "p0000000-0000-4000-8000-000000000003",
+        "code": "YG-003",
+        "name": "王强",
+        "deptCode": "delivery",
+        "position": "项目经理",
+        "phone": "13800000003",
+        "email": "wangqiang@example.com",
+        "active": false,
+        "hireDate": "2020-05-20",
+        "note": "已离职，历史合同保留姓名快照",
+        "createdAt": "2025-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z"
+      }
+    ],
+    "dicts": [
+      {
+        "id": "dict-contractType-sales",
+        "category": "contractType",
+        "code": "sales",
+        "name": "销售合同",
+        "sort": 10,
+        "enabled": true,
+        "color": "#409EFF",
+        "builtin": false,
+        "note": "",
+        "createdAt": "2025-01-01T00:00:00.000Z",
+        "updatedAt": "2025-01-01T00:00:00.000Z"
+      },
+      {
+        "id": "dict-contractType-service",
+        "category": "contractType",
+        "code": "service",
+        "name": "服务合同",
+        "sort": 20,
+        "enabled": true,
+        "color": "#67C23A",
+        "builtin": false,
+        "note": "",
+        "createdAt": "2025-01-01T00:00:00.000Z",
+        "updatedAt": "2025-01-01T00:00:00.000Z"
+      },
+      {
+        "id": "dict-contractType-purchase",
+        "category": "contractType",
+        "code": "purchase",
+        "name": "采购合同",
+        "sort": 30,
+        "enabled": true,
+        "color": "#E6A23C",
+        "builtin": false,
+        "note": "",
+        "createdAt": "2025-01-01T00:00:00.000Z",
+        "updatedAt": "2025-01-01T00:00:00.000Z"
+      },
+      {
+        "id": "dict-contractStatus-draft",
+        "category": "contractStatus",
+        "code": "draft",
+        "name": "草稿",
+        "sort": 10,
+        "enabled": true,
+        "color": "#909399",
+        "builtin": true,
+        "note": "",
+        "createdAt": "2025-01-01T00:00:00.000Z",
+        "updatedAt": "2025-01-01T00:00:00.000Z"
+      },
+      {
+        "id": "dict-contractStatus-executing",
+        "category": "contractStatus",
+        "code": "executing",
+        "name": "执行中",
+        "sort": 20,
+        "enabled": true,
+        "color": "#409EFF",
+        "builtin": true,
+        "note": "",
+        "createdAt": "2025-01-01T00:00:00.000Z",
+        "updatedAt": "2025-01-01T00:00:00.000Z"
+      },
+      {
+        "id": "dict-contractStatus-finished",
+        "category": "contractStatus",
+        "code": "finished",
+        "name": "已完结",
+        "sort": 30,
+        "enabled": true,
+        "color": "#67C23A",
+        "builtin": true,
+        "note": "",
+        "createdAt": "2025-01-01T00:00:00.000Z",
+        "updatedAt": "2025-01-01T00:00:00.000Z"
+      },
+      {
+        "id": "dict-contractStatus-terminated",
+        "category": "contractStatus",
+        "code": "terminated",
+        "name": "已终止",
+        "sort": 40,
+        "enabled": true,
+        "color": "#F56C6C",
+        "builtin": true,
+        "note": "",
+        "createdAt": "2025-01-01T00:00:00.000Z",
+        "updatedAt": "2025-01-01T00:00:00.000Z"
+      },
+      {
+        "id": "dict-contractStatus-overdue",
+        "category": "contractStatus",
+        "code": "overdue",
+        "name": "逾期",
+        "sort": 50,
+        "enabled": true,
+        "color": "#E6A23C",
+        "builtin": true,
+        "note": "",
+        "createdAt": "2025-01-01T00:00:00.000Z",
+        "updatedAt": "2025-01-01T00:00:00.000Z"
+      },
+      {
+        "id": "dict-payMethod-transfer",
+        "category": "payMethod",
+        "code": "transfer",
+        "name": "银行转账",
+        "sort": 10,
+        "enabled": true,
+        "color": "#409EFF",
+        "builtin": false,
+        "note": "",
+        "createdAt": "2025-01-01T00:00:00.000Z",
+        "updatedAt": "2025-01-01T00:00:00.000Z"
+      },
+      {
+        "id": "dict-payMethod-cash",
+        "category": "payMethod",
+        "code": "cash",
+        "name": "现金",
+        "sort": 20,
+        "enabled": true,
+        "color": "#67C23A",
+        "builtin": false,
+        "note": "",
+        "createdAt": "2025-01-01T00:00:00.000Z",
+        "updatedAt": "2025-01-01T00:00:00.000Z"
+      },
+      {
+        "id": "dict-department-sales",
+        "category": "department",
+        "code": "sales",
+        "name": "销售部",
+        "sort": 10,
+        "enabled": true,
+        "color": "#409EFF",
+        "builtin": false,
+        "note": "",
+        "createdAt": "2025-01-01T00:00:00.000Z",
+        "updatedAt": "2025-01-01T00:00:00.000Z"
+      },
+      {
+        "id": "dict-department-delivery",
+        "category": "department",
+        "code": "delivery",
+        "name": "交付部",
+        "sort": 20,
+        "enabled": true,
+        "color": "#67C23A",
+        "builtin": false,
+        "note": "",
+        "createdAt": "2025-01-01T00:00:00.000Z",
+        "updatedAt": "2025-01-01T00:00:00.000Z"
+      },
+      {
+        "id": "dict-department-finance",
+        "category": "department",
+        "code": "finance",
+        "name": "财务部",
+        "sort": 30,
+        "enabled": true,
+        "color": "#E6A23C",
+        "builtin": false,
+        "note": "",
+        "createdAt": "2025-01-01T00:00:00.000Z",
+        "updatedAt": "2025-01-01T00:00:00.000Z"
+      }
+    ],
+    "settings": {
+      "id": "app",
+      "reminderDays": 30,
+      "overdueDays": 0,
+      "staleDays": 90,
+      "amountPrecision": 2,
+      "pageSize": 20,
+      "operatorName": "本机用户",
+      "autoNo": { "enabled": true, "pattern": "HT-YYYYMM-###" },
+      "autoBackup": { "enabled": true, "intervalDays": 7 },
+      "ignoredReminders": [],
+      "dictCategories": [
+        { "code": "contractType", "name": "合同类型", "builtin": true },
+        { "code": "contractStatus", "name": "合同状态", "builtin": true },
+        { "code": "payMethod", "name": "付款方式", "builtin": true },
+        { "code": "department", "name": "部门", "builtin": true }
+      ],
+      "columnVisibility": {},
+      "ai": {
+        "enabled": true,
+        "provider": "custom",
+        "baseUrl": "http://legacy.local/v1",
+        "model": "legacy-model",
+        "apiKey": "sk-legacy-secret",
+        "timeout": 30,
+        "temperature": 0.3
+      },
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2026-10-01T07:00:00.000Z"
+    }
+  }
+}

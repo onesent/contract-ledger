@@ -195,6 +195,9 @@ CREATE TABLE contracts (
   counterparty TEXT NOT NULL,
   type_item_id TEXT NOT NULL REFERENCES dict_items(id),
   amount_cents INTEGER NOT NULL CHECK (amount_cents >= 0),
+  -- 旧账导入的开账余额：视图按 opening + 明细求和，避免导入时伪造流水
+  opening_paid_cents INTEGER NOT NULL DEFAULT 0 CHECK (opening_paid_cents >= 0),
+  opening_delivered_cents INTEGER NOT NULL DEFAULT 0 CHECK (opening_delivered_cents >= 0),
   sign_date TEXT NOT NULL,
   start_date TEXT NOT NULL,
   due_date TEXT NOT NULL,

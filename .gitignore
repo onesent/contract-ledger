@@ -7,3 +7,12 @@ node_modules/
 .vite/
 .omo/
 
+data/
+*.db
+*.db-wal
+*.db-shm
+coverage/
+packages/*/dist/
+*.tsbuildinfo
+.env
+*.local

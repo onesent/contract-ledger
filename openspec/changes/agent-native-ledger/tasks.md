@@ -2,10 +2,10 @@
 
 ## 1. 工作区与工具链
 
-- [ ] 1.1 建立 npm workspaces：`packages/{core,storage-sqlite,cli,server,mcp,web}` 与根 `tsconfig`、`vitest.config`；`npm install` 成功且 `npm run typecheck` 以 0 退出
-- [ ] 1.2 增加 `scripts/check-runtime.mjs`：启动时断言 Node ≥ 24.18 且 `SELECT sqlite_version()` ≥ 3.51.3；用低于门槛的模拟值跑单测，断言抛出可读错误
-- [ ] 1.3 根脚本提供 `typecheck` / `test` / `validate` / `build`；在干净克隆上依次执行四个脚本，全部以 0 退出
-- [ ] 1.4 引入 `better-sqlite3@13.0.3`、`kysely@0.29.8`、`kysely-codegen@0.20.0`、`postgrator@8.0.1`、`zod@4.6.7`、`hono@4.13.18`、`@hono/node-server@2.1.7`、`commander@15.1.0`、`@modelcontextprotocol/server@2.4.0`、`vitest@5.1.0`；`npm ls --depth=0` 无 extraneous、无 peer 警告
+- [x] 1.1 建立 npm workspaces：`packages/{core,storage-sqlite,cli,server,mcp,web}` 与根 `tsconfig`、`vitest.config`；`npm install` 成功且 `npm run typecheck` 以 0 退出
+- [x] 1.2 增加 `scripts/check-runtime.mjs`：启动时断言 Node ≥ 24.18 且 `SELECT sqlite_version()` ≥ 3.51.3；用低于门槛的模拟值跑单测，断言抛出可读错误
+- [x] 1.3 根脚本提供 `typecheck` / `test` / `validate` / `build`；在干净克隆上依次执行四个脚本，全部以 0 退出
+- [x] 1.4 引入 `better-sqlite3@13.0.3`、`kysely@0.29.8`、`kysely-codegen@0.20.0`、`postgrator@8.0.1`、`zod@4.6.7`、`hono@4.13.18`、`@hono/node-server@2.1.7`、`commander@15.1.0`、`@modelcontextprotocol/server@2.4.0`、`vitest@5.1.0`；`npm ls --depth=0` 无 extraneous、无 peer 警告
 
 ## 2. 领域内核（core）
 
