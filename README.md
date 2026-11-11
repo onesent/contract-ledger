@@ -15,23 +15,27 @@
 - 源码：按 `views / components / composables / data / utils / ai / styles` 分目录维护，便于阅读与后续替换存储层 / AI 实现。
 - 构建：Vite + `vite-plugin-singlefile`，把 JS、CSS、Element Plus 按需样式、ECharts、内联图标全部打进 `dist/index.html`，`dist/` 下**只有**这一个文件。
 - 运行期：不发起任何 `fetch / XHR / WebSocket / 字体 / 图片 / CDN` 请求；断网可完整使用。
-- 路由：`createWebHashHistory()`（`#/home`、`#/contracts`、`#/personnel`、`#/dicts`、`#/settings`），`file://` 下刷新、前进后退不白屏。
+- 路由：`createWebHashHistory()`（`#/home`、`#/contracts/sale`、`#/contracts/purchase`、`#/personnel`、`#/dicts`、`#/settings`；旧链接 `#/contracts` 重定向到销售入口并透传 `query`，书签不失效），`file://` 下刷新、前进后退不白屏。
 
 ### 1.2 关键能力一览
 
-- 合同 17 字段（录入 / 派生 / 系统自动三类），未收金额与收款进度实时派生、不可手改，合同金额为 0 时进度显示「—」而不是 NaN。
-- 收款流水登记自动累加已收金额；状态变化自动写状态变更时间与变更日志（el-timeline 可查）。
+- 合同分**销售 / 采购两个方向**（`direction` 字段是唯一方向真相）：方向决定对方称谓（客户 / 供应商）、金额标签（已收 / 未收 / 收款进度 对 已付 / 未付 / 付款进度）、统计口径与提醒语义；两个入口共用同一集合与视图，按方向过滤，新建合同自动继承入口方向。
+- 两条独立执行轴：**资金执行流水**（收款 / 付款）与**交付执行明细**（纯金额计量，数量与单位仅作描述）；资金进度与交付进度实时派生、不可手改，并派生错位差额（预收 / 预付 / 已交付未收款 / 已到货未付款）；合同金额为 0 时两条进度均显示「—」而不是 NaN。
+- 资金流水登记自动累加已收/已付金额，交付明细登记自动累加已交付金额；状态变化自动写状态变更时间与变更日志（el-timeline 可查）。
 - 字典（类型 / 状态 / 付款方式 / 部门 + 自定义分类）、人员档案、引用保护、批量转交。
-- 首页 10 张统计卡、3 个 ECharts 图表、6 组提醒清单，点击可带着筛选条件跳到列表。
+- 首页按方向切换视图：12 张统计卡、3 个 ECharts 图表、9 组提醒清单全部基于选中方向重算，销售与采购金额**永不相加**；点击可带着筛选条件跳到对应方向的列表。
 - 备份导出 / 快照 / 导入（覆盖或按 id 合并）/ 非法备份校验 / 清空 / 恢复演示数据，导入使用事务，失败整体回滚。
 - 存储引擎三态：IndexedDB → localStorage（降级）→ 内存只读；容量与集合记录数常驻页脚与设置页。
 - AI 能力只保留接口与入口，默认零网络请求；备份强制剔除 API Key / Base URL。
 
 ### 1.3 实现说明（数据一致性）
 
-- 合同「已收金额」以合同字段为准；登记收款会追加一条收款流水并同步累加。
-- 删除一条收款流水会同步回退合同已收金额，并把「收款日期」更新为剩余流水中的最近日期。
-- 月度收款趋势图严格按**收款流水**聚合；手工直接把「已收金额」改大、却没有登记流水时，总额统计会变化，但趋势图不会凭空产生流水。建议始终用「登记收款」维护流水。
+- 合同「已收 / 已付金额」以合同字段为准；登记资金流水会追加一条流水并同步累加，界面文案按方向取义（销售为收款、采购为付款）。
+- 删除一条资金流水会同步回退合同已收/已付金额，并把「收款 / 付款日期」更新为剩余流水中的最近日期。
+- 合同「已交付金额」与「最后交付日期」**只由交付明细的登记 / 删除维护**，与明细在同一次事务内写入；表单中只读。删除交付明细后按剩余明细重算汇总（验收驳回的记录不计入），最后日期取剩余记录中的最大值。
+- 合同已有资金流水或交付明细时**方向锁定不可修改**（保存被领域层拒绝并说明原因）；合同金额不能改到低于已收/已付或已交付金额；累计交付金额不能超过合同金额（超出时提示剩余可交付金额）。
+- 删除合同会在同一次事务中级联删除其关联的资金流水与交付明细，不留孤立记录。
+- 月度收款趋势图严格按**资金流水**聚合；手工直接把「已收金额」改大、却没有登记流水时，总额统计会变化，但趋势图不会凭空产生流水。建议始终用「登记收款 / 付款」维护流水。
 - 所有写入都经 `src/data/store.js`；写入前会做结构化深拷贝（Vue 响应式 Proxy 不能被 IndexedDB 直接克隆），成功后一次性更新内存缓存并刷新 UI。
 
 ---
@@ -86,11 +90,11 @@ npm run build
 | ② `dist + http.server` / `npm run preview` | 构建时需 Node，使用时无需安装 | 需一个静态文件服务 | **最高（推荐）**：明确 origin，IndexedDB 事务写入，刷新/重启保留 | 日常记账、正式使用 |
 | ③ 双击 `dist/index.html` | 否 | 否 | 浏览器定义，可能降级为 localStorage / 只读；数据与路径绑定 | 便携演示、临时查看、拷贝给他人 |
 
-### 2.2 实测首屏感受
+### 2.2 首屏与加载行为
 
-- 本机 Edge（Chromium 157）headless 用 `python -m http.server` 打开 `dist/index.html`：首次挂载 + 首页统计/图表渲染约 1s 内完成，视觉上无白屏。
-- 单文件 1.99 MB（见第 11 节），本地 HTTP 加载无需等待外链资源，断网时体验一致。
-- 首次启动若载入演示数据，会额外写入 15 条合同与 14 条收款，仍在百毫秒级完成。
+- 单文件产物由本地静态服务或 `file://` 直接加载，不依赖外链资源，断网时体验一致。
+- 首页统计卡与 ECharts 图表在数据就绪后同步渲染，不会出现白屏。
+- 首次启动载入演示数据会写入 18 条合同、17 条资金流水与 6 条交付明细。
 
 ---
 
@@ -180,9 +184,9 @@ build: { cssCodeSplit: false, assetsInlineLimit: 100000000 }
 │   ├── main.js                      挂载、zh-cn locale、全局 errorHandler、存储初始化、能力探测
 │   ├── App.vue                      el-container 布局壳、el-menu hash 导航、便携/降级/只读横幅、页脚存储状态
 │   ├── router/
-│   │   └── index.js                 hash 路由、静态引入视图、未保存离开守卫
+│   │   └── index.js                 hash 路由（销售/采购两入口 + /contracts 重定向透传 query）、静态引入视图、未保存离开守卫
 │   ├── data/
-│   │   ├── schema.js                集合定义、schemaVersion、默认设置、幂等迁移、15 条演示数据
+│   │   ├── schema.js                集合定义、schemaVersion、方向与交付常量、按方向生成列定义、幂等迁移、18 条演示数据
 │   │   ├── store.js                 唯一存储入口（IndexedDB / localStorage / 内存只读、事务、迁移、容量）
 │   │   └── backup.js                导出、快照、校验、覆盖/合并导入、密钥剔除、下载
 │   ├── composables/
@@ -190,14 +194,14 @@ build: { cssCodeSplit: false, assetsInlineLimit: 100000000 }
 │   │   └── useMediaQuery.js         响应式断点（窄屏卡片布局）
 │   ├── views/
 │   │   ├── HomeView.vue             统计卡、ECharts、提醒清单、快捷入口、备份到期提示
-│   │   ├── ContractsView.vue        筛选、排序、分页、列显隐、批量操作、表单/详情/收款
+│   │   ├── ContractsView.vue        方向化列表（销售/采购共用，按 route.meta.direction 过滤）、筛选、排序、分页、列显隐、批量操作、表单/详情/收款/登记交付
 │   │   ├── PersonnelView.vue        人员 CRUD、在职开关、引用保护、批量转交
 │   │   ├── DictsView.vue            字典分类 tab、字典项 CRUD、颜色/启用、引用保护
 │   │   └── SettingsView.vue         常规设置、存储状态、备份面板、AI 配置、操作日志
 │   ├── components/                  仅业务组合组件（无 Base* 基建组件）
 │   │   ├── ContractTable.vue        el-table 列模板薄封装，emit 业务事件
-│   │   ├── ContractForm.vue         el-dialog + el-form（17 字段 + 附件元信息 + AI 入口 + 未保存守卫）
-│   │   ├── ContractDetail.vue       el-drawer + el-descriptions + el-timeline（收款/状态日志）
+│   │   ├── ContractForm.vue         el-dialog + el-form（合同字段 + 附件元信息 + AI 入口 + 未保存守卫；对方与金额标签随方向切换，方向控件仅无执行记录时可改）
+│   │   ├── ContractDetail.vue       el-drawer + el-descriptions + 资金/交付双进度条与错位差额 + el-timeline（资金流水/交付明细/状态日志）
 │   │   ├── ReminderList.vue         el-card + el-badge + el-tag 提醒清单
 │   │   ├── ChartPanel.vue           ECharts 生命周期（init / resize / dispose）薄封装
 │   │   ├── BackupPanel.vue          导出/快照/导入/清空/恢复演示数据的业务组合
@@ -206,7 +210,7 @@ build: { cssCodeSplit: false, assetsInlineLimit: 100000000 }
 │   ├── utils/
 │   │   ├── format.js                金额 ¥+千分位+2 位小数、日期、时间戳、文件大小、进度百分比
 │   │   ├── validate.js              el-form 规则工厂 + 备份结构/字段校验
-│   │   ├── derive.js                未收/进度/状态判定/提醒/统计/趋势（纯函数）
+│   │   ├── derive.js                未收/资金进度/交付进度/错位差额/状态判定/按方向统计/提醒/趋势（纯函数）
 │   │   ├── id.js                    UUID（crypto.randomUUID + 降级）
 │   │   └── echarts.js               全项目唯一 ECharts 注册点
 │   ├── ai/
@@ -221,11 +225,13 @@ build: { cssCodeSplit: false, assetsInlineLimit: 100000000 }
 
 ### 4.1 数据集合
 
-`contracts`、`payments`、`personnel`、`dicts`、`settings`、`meta`。
+`contracts`、`payments`、`deliveries`、`personnel`、`dicts`、`settings`、`meta`。
 
 - 每条业务记录含 `id`（UUID）、`createdAt`、`updatedAt`；写入统一由 `store.js` 刷新 `updatedAt`。
+- `contracts` 的方向与交付字段：`direction`（`sale` / `purchase`，唯一的方向真相）、`deliveredAmount`（已交付金额汇总，只由交付明细维护）、`lastDeliveryDate`（最后交付日期）。
+- `deliveries`（交付执行明细）：`id`、`contractId`、`date`（交付日期）、`amount`（本次交付金额，必须大于 0）、`quantity` / `unit`（仅作描述，不参与任何计算）、`status`（`delivered` 已交付 / `accepted` 已验收 / `rejected` 验收驳回；`rejected` 不计入已交付金额但保留供追溯）、`note`、`createdAt`、`updatedAt`。
 - `settings` 为单条 `id: 'app'` 记录；`meta` 为单条 `id: 'meta'` 记录，含 `schemaVersion`、`seeded`（演示数据标记）、`storageEngine`、`lastBackupAt`、`lastImportAt`、`lastMigrationAt`、`opLogs`。提醒忽略记录按 5.4 的要求写入 `settings.ignoredReminders`（不删除业务数据）。
-- 派生字段（未收金额、收款进度、逾期/临期判定等）一律实时计算，不落库、不提供编辑入口。
+- 派生字段（未收金额、资金进度、交付进度、错位差额、逾期/临期判定等）一律实时计算，不落库、不提供编辑入口；`deliveredAmount` / `lastDeliveryDate` 为落库的汇总字段，但只由交付明细的登记 / 删除在同一事务内维护，表单中只读。
 
 ---
 
@@ -254,8 +260,10 @@ build: { cssCodeSplit: false, assetsInlineLimit: 100000000 }
 | 抽屉 | `el-drawer` | 手写侧滑面板 |
 | 二次确认 | `ElMessageBox.confirm` | 手写 confirm、`window.confirm` |
 | 轻提示 / 通知 | `ElMessage` / `ElNotification` | 手写 toast 容器 |
-| 状态色标 / 类型 | `el-tag`（`type` / `effect` / CSS 变量色） | 手写彩色 span |
-| 收款进度 | `el-progress`（`:percentage`、自定义 color） | 手写 div 宽度条 |
+| 状态色标 / 类型 / 验收状态 | `el-tag`（`type` / `effect` / CSS 变量色） | 手写彩色 span |
+| 资金 / 交付进度（两条独立进度条） | `el-progress`（`:percentage`、自定义 color） | 手写 div 宽度条 |
+| 交付明细 | `el-timeline` + `el-timeline-item`（金额、验收状态、备注、数量单位） | 手写表格或竖线圆点 |
+| 首页方向切换 | `el-radio-group`（销售 / 采购） | 手写 tab 切换 |
 | 详情字段 | `el-descriptions` + `el-descriptions-item` | dl/dt/dd |
 | 收款 / 状态日志 | `el-timeline` + `el-timeline-item` | 手写竖线与圆点 |
 | 空状态 | `el-empty`（含引导按钮） | 空白占位 div |
@@ -271,7 +279,7 @@ build: { cssCodeSplit: false, assetsInlineLimit: 100000000 }
 
 ### 5.3 全局中文
 
-`src/main.js` 引入 `zhCn` 并通过 `app.provide('ep-locale', zhCn)` 提供；`App.vue` 用 `<el-config-provider :locale="locale">` 包裹根组件。分页「共 N 条 / 20条/页」、日期选择器「YYYY 年 MM 月 / 日一二三四五六」、`ElMessageBox` 等命令式 API 均为中文（实测截图/断言见第 11 节）。
+`src/main.js` 引入 `zhCn` 并通过 `app.provide('ep-locale', zhCn)` 提供；`App.vue` 用 `<el-config-provider :locale="locale">` 包裹根组件。分页「共 N 条 / 20条/页」、日期选择器「YYYY 年 MM 月 / 日一二三四五六」、`ElMessageBox` 等命令式 API 均为中文。
 
 ---
 
@@ -280,7 +288,7 @@ build: { cssCodeSplit: false, assetsInlineLimit: 100000000 }
 ### 6.1 导出备份
 
 1. 进入「系统设置 → 备份与恢复」或首页/合同页点击「导出备份」。
-2. 打开 `el-dialog`，确认各集合记录数（合同 / 收款 / 人员 / 字典 / 设置）。
+2. 打开 `el-dialog`，确认各集合记录数（合同 / 收款 / 交付明细 / 人员 / 字典 / 设置）。
 3. 点击「确认导出」，下载：
 
 ```text
@@ -292,11 +300,25 @@ build: { cssCodeSplit: false, assetsInlineLimit: 100000000 }
 ```json
 {
   "app": "contract-ledger",
-  "schemaVersion": 1,
-  "exportedAt": "2026-11-11T10:05:00.000Z",
+  "schemaVersion": 2,
+  "exportedAt": "2026-11-12T10:05:00.000Z",
   "data": {
-    "contracts": [],
+    "contracts": [
+      {
+        "id": "c0000000-0000-4000-8000-000000000001",
+        "no": "HT-202408-001",
+        "customer": "星海科技有限公司",
+        "direction": "sale",
+        "typeCode": "sales",
+        "amount": 480000,
+        "receivedAmount": 480000,
+        "deliveredAmount": 0,
+        "lastDeliveryDate": "",
+        "……": "其余字段（日期、状态、负责人、状态日志、附件等）省略"
+      }
+    ],
     "payments": [],
+    "deliveries": [],
     "personnel": [],
     "dicts": [],
     "settings": {
@@ -314,6 +336,9 @@ build: { cssCodeSplit: false, assetsInlineLimit: 100000000 }
 }
 ```
 
+- `schemaVersion` 当前为 **2**：备份新增 `deliveries` 集合与合同的 `direction` / `deliveredAmount` / `lastDeliveryDate` 字段。
+- **v1 备份兼容**：`schemaVersion: 1` 的历史备份仍可导入；校验时缺失的新字段只记警告，导入后立即由幂等迁移补齐（`typeCode === 'purchase'` 的合同推断为采购，其余默认销售，`deliveries` 补空数组）。
+- **合并导入方向冲突**：同一 `id` 的合同方向不一致时，若本机该合同已有资金流水或交付明细，以本机方向为准并计入「保留条数」，不会静默翻转。
 - `settings.ai` 中**强制剔除** `apiKey`、`baseUrl`、`enabled`。
 - 导出成功后更新 `meta.lastBackupAt`；若当前为只读模式，文件仍会下载，但会明确提示「未能更新上次备份时间」。
 
@@ -324,16 +349,16 @@ build: { cssCodeSplit: false, assetsInlineLimit: 100000000 }
    - **结构 / schemaVersion / 字段类型 / 必填项校验**；不通过则弹出「备份文件校验失败」对话框，逐条列出具体字段与原因。
    - 弹出 `ElMessageBox` 让用户选择：
      - **覆盖导入**：用备份整体替换现有数据；
-     - **合并导入**：按 `id` 去重，冲突取 `updatedAt` 较新者；设置采用备份中的业务设置，本机 AI 密钥保留。
+     - **合并导入**：按 `id` 去重，冲突取 `updatedAt` 较新者；合同方向冲突且本机已有执行记录时以本机方向为准（见 6.1）；设置采用备份中的业务设置，本机 AI 密钥保留。
    - **自动下载导入前快照**：`合同台账快照_YYYYMMDD_HHmmss.json`。
    - 用**单事务**写入（IndexedDB 清理并重写全部集合；localStorage 单键整库写入），任一步失败整体回滚。
 3. 成功后提示导入模式与新增/更新/保留条数，派生值、提醒与首页统计自动重建。
-4. 非法 / 截断 / 版本不匹配的 JSON 不会修改现有数据（已实测）。
+4. 非法 / 截断 / 版本不匹配的 JSON 不会修改现有数据。
 
 ### 6.3 清空与恢复演示数据
 
-- 「清空全部数据」：`ElMessageBox` 二次确认，提示先导出备份。清空合同 / 收款 / 人员，并把字典重置为内置项，保留设置。
-- 「恢复演示数据」：二次确认后，用 15 条演示数据替换当前业务数据（AI 配置与列显隐保留）。
+- 「清空全部数据」：`ElMessageBox` 二次确认，提示先导出备份。清空合同 / 收款 / 交付明细 / 人员，并把字典重置为内置项，保留设置。
+- 「恢复演示数据」：二次确认后，用 18 份合同、17 条资金流水与 6 条交付明细的演示数据替换当前业务数据（AI 配置与列显隐保留）。
 - 所有危险操作都有明确文案与取消入口。
 
 ---
@@ -342,7 +367,7 @@ build: { cssCodeSplit: false, assetsInlineLimit: 100000000 }
 
 首次启动检测到空库时，会通过 `ElMessageBox.confirm` 询问是否载入演示数据；也可以随时在「系统设置 → 备份与恢复」点击「恢复演示数据」。
 
-- 规模：**15 份合同 / 14 条收款流水 / 6 名人员 / 17 个字典项**（4 个内置分类）。
+- 规模：**18 份合同（销售 15 / 采购 3）/ 17 条资金流水 / 6 条交付明细 / 6 名人员 / 17 个字典项**（4 个内置分类；合同类型中「销售合同 / 采购合同」两项已停用不删除，方向由合同字段表达）。
 - 覆盖场景：
 
 | 场景 | 演示数据示例 |
@@ -351,6 +376,11 @@ build: { cssCodeSplit: false, assetsInlineLimit: 100000000 }
 | 已收为 0 | 北辰医疗（逾期未收）、启明电子（已终止） |
 | 部分收款 | 云图数据、恒远建设、蓝湖环保、远航物流等 |
 | 全额收款 | 星海科技、天成制造、星河互娱、绿源农业 |
+| 采购合同（0 进度） | 锐捷网络设备（未到货、未付款，交付与付款进度均为 0） |
+| 采购合同（部分进度 + 验收驳回） | 华美办公家具（已付 18 万、已交付 18 万含一批待验收，另有 1 条 2 万验收驳回不计入已交付） |
+| 采购合同（满进度已完结） | 新元新材料（全部到货验收、款项付清，两条进度 100%） |
+| 销售合同部分交付 | 云图数据（已收 15 万、已交付 12 万，错位差额 3 万为预收） |
+| 交付三种验收状态 | 已交付 / 已验收 / 验收驳回均有样本记录 |
 | 本月到期 | 恒远建设（到期日 = 当月最后一天） |
 | 已逾期 | 北辰医疗（已过期 20 天）、华宇咨询 |
 | 跨年度签订 | 星海科技（2024-08 → 2025-08）、启明电子（2024-12 签订） |
@@ -378,7 +408,7 @@ build: { cssCodeSplit: false, assetsInlineLimit: 100000000 }
 
 - 每次启动若 IndexedDB 可用，会检查 localStorage 中是否遗留数据：若有业务数据，按 `id` 去重（`updatedAt` 较新者优先）合并进 IndexedDB，写入成功后才删除 localStorage 副本，并显示迁移前后记录数。
 - 运行中若 IndexedDB 恢复可用，可在设置页点击「重新检测并迁移到 IndexedDB」；同样按 id 去重、成功后清理 localStorage，避免双份数据互相覆盖。
-- Schema 迁移：`migrateDataset()` 幂等补齐 `id/createdAt/updatedAt` 与集合结构，不丢历史数据。
+- Schema 迁移：`migrateDataset()` 幂等补齐 `id/createdAt/updatedAt` 与集合结构，不丢历史数据。v1 → v2 升级时额外补齐：缺失的 `direction`（`typeCode === 'purchase'` 推断为采购，其余销售）、`deliveredAmount = 0`、`lastDeliveryDate = ''`、`deliveries = []`；停用（不删除）`contractType` 字典的「销售合同 / 采购合同」两项，避免被引用计数拦截；并在 `meta.opLogs` 写一条迁移摘要。同一份数据连续迁移两次结果完全一致。
 
 ---
 
@@ -414,13 +444,11 @@ export async function complete(prompt, context = {}, config = {}) {
 
 3. **打开总开关**：保持 `extractContract / summarize / draftReminder / askLedger` 的返回结构不变，业务组件无需改动。合同表单「粘贴文本智能填入」、详情页「AI 摘要 / 生成催收文案」、首页「用一句话查台账」会自动变为可用。
 
-> 未配置时应用零外部请求（已用 `performance.getEntriesByType('resource')` 实测无外部资源）；不把任何密钥写入源码、演示数据或备份文件。
+> 未配置时应用零外部请求；不把任何密钥写入源码、演示数据或备份文件。
 
 ---
 
-## 11. 构建产物校验与实测结果
-
-### 11.1 校验命令
+## 11. 构建产物校验
 
 ```bash
 npm run build
@@ -437,76 +465,7 @@ npm run check
 6. 包含 hash 路由标识与 AI provider 标识；
 7. 产物 ≤ 5 MB，超限以非零退出码失败并打印降体积建议。
 
-### 11.2 实测输出（本机，2026-11-11）
-
-```text
-dist/index.html：1.99 MB（2086319 字节）
-内联 <script>：1 个；内联 <style>：1 个
-dist/ 文件数：1（index.html）
-------------------------------
-✓ dist/index.html 存在 — 1.99 MB
-✓ dist/ 仅包含 index.html（无 assets/、无 .css/.js/.svg 残留）
-✓ 无 <script src=...> 外链脚本
-✓ 无 <link rel="stylesheet" href=...> 外部样式
-✓ 无任何外链 http(s) 资源引用（字体内联、图标内联、无 favicon 外链）
-✓ Element Plus 样式已内联（--el-color-primary / .el-button）
-✓ 包含 hash 路由标识
-✓ 包含 AI provider 标识（未配置占位实现）
-✓ dist/index.html 体积 ≤ 5 MB（实测 1.99 MB）
-------------------------------
-全部断言通过：产物为单一自包含 index.html。
-```
-
-### 11.3 已做过的端到端验证（Edge/Chromium 157 headless + CDP）
-
-- 首次启动载入演示数据：15 份合同 / 14 条收款 / 6 名人员；首页 3 个 ECharts SVG、6 组提醒；控制台零报错。
-- 分页中文「共 15 条 / 20条/页 / 前往 页」；日期选择器中文「2026 年 11 月 / 日一二三四五六」。
-- 首页「已逾期」统计卡点击 → `#/contracts?quick=overdue`，2 行结果，筛选标签「快捷：已逾期」可见。
-- 登记收款：96,000 元 → 已收变 96,000、未收 0、进度 100%，详情时间线新增 1 条收款。
-- 改状态为「已完结」→ 状态变更时间更新、详情日志新增一条（操作人/旧值/新值）。
-- 删除有 6 份合同的负责人 → 被拦截并打开「批量转交合同负责人」入口；删除被 5 份合同引用的字典项 → 提示「已被 5 份合同引用，不能删除，只能停用」；内置状态项删除按钮禁用。
-- 列显隐取消「备注」→ 表格列消失；刷新后仍隐藏；恢复默认后重新出现。
-- 批量选 2 行改状态 → 生成状态日志，列表生效。
-- 导出备份（33,776 字节）：文件名 `合同台账备份_20261111_1811.json`，结构含 15/15/6/17 条；配置过 `sk-test-secret-123` 与 `http://127.0.0.1:9999/v1` 后导出，文件中**不含** key 与 Base URL。
-- 截断 JSON 导入 → 报错「JSON 解析失败」且现有数据条数不变；清空后导入覆盖模式 → 15/15/6/17 完整恢复，历史收款与状态变更日志一致。
-- 刷新页面：演示数据仍为 15 份，不再重复询问载入；`file://` 打开显示便携模式横幅且可正常读写（Edge 下 IndexedDB 可用）。
-- 禁用 IndexedDB：自动降级 localStorage，横幅提示，写入/刷新后数据保留；重新启用 IndexedDB 后自动迁移（合同 0→15、收款 0→14），localStorage 副本清理。
-- 同时禁用 IndexedDB 与 localStorage：进入内存只读模式，所有写入入口 disabled，载入演示数据被明确拒绝，导出仍成功并提示未更新备份时间。
-- 800px / 375px 窄屏：合同转卡片布局，页面无横向溢出；桌面表格列可横向滚动但不撑破页面。
-- 路由前进/后退、刷新均为 hash 形式且不白屏；`performance` 资源列表无任何外部 origin。
-
----
-
-## 12. 完成前自检清单
-
-### 业务 1–10
-
-- [x] **1.** 17 个字段齐全；#6 未收金额、#7 收款进度为只读派生且随 #4/#5 实时变化；合同金额 0 时进度显示「—」（除零已处理）。
-- [x] **2.** 修改状态后 #14 状态变更时间自动更新，并追加一条可在详情 `el-timeline` 查看的日志（旧值/新值/时间/操作人）。
-- [x] **3.** 删除被引用字典项、删除/停用被引用负责人均被拦截并提示引用数量；负责人提供「批量转交」入口（转交写操作日志）。
-- [x] **4.** 首页每个统计数字与提醒条数均由同一套纯函数计算，可与列表逐条核对；点击统计卡/提醒跳转带正确筛选条件，条件以 `el-tag` 可见且可清除。
-- [x] **5.** 导出 → 清空 → 导入「覆盖」→ 合同/收款/人员/字典/设置与导出前一致（AI 密钥除外），已实测 15/15/6/17 完整恢复。
-- [x] **6.** 导入非法/截断/版本不匹配 JSON 有明确字段级报错，现有数据完好（实测截断文件报错后条数不变）。
-- [x] **7.** 未配置 AI 时全部功能正常；AI 配置不出现在导出文件；应用零外部请求（资源列表实测为空）。
-- [x] **8.** 所有合同/人员/付款方式/字典下拉均实时读自字典或人员档案；组件内无硬编码业务选项数组。
-- [x] **9.** 合同表单/设置页编辑态离开有「有未保存修改」确认；批量操作、列显隐、分页、各列排序均生效（列显隐刷新后仍记忆）。
-- [x] **10.** 窄屏 < 1024px 转卡片布局；800px / 375px 实测无横向溢出；控制台零报错。
-
-### UI 框架与复用 11–14
-
-- [x] **11.** 一·B 映射表逐条核对通过；无手写表格/分页/模态框/Toast/确认框/日历/进度条/空状态/加载遮罩/图表坐标轴；`src/components/` 无任何 `Base*` 基建组件。
-- [x] **12.** `el-config-provider` 中文生效：分页「共 N 条」、日期选择器月份/星期、上传文案、确认框按钮均为中文；图标全部为内联 SVG，无外链资源。
-- [x] **13.** ECharts 只在 `src/utils/echarts.js` 注册一次，未全量引入；`ResizeObserver + resize()` 与卸载 `dispose()` 均生效，切换路由无残留实例。
-- [x] **14.** `ElMessage / ElMessageBox / ElNotification` 由 resolver 自动注入样式；构建产物包含 `.el-message / .el-message-box / .el-notification` 样式，实测弹窗样式正常。
-
-### 工程与存储 15–20
-
-- [x] **15.** `npm install && npm run dev` 可启动（实测 200）；`npm run build && npm run check` 通过；断言无 script src / link stylesheet / 外链资源、dist 无 assets 残留、Element Plus 样式内联、单一自包含产物且 ≤ 5 MB。
-- [x] **16.** localhost 方式连续使用、刷新、重启浏览器后数据完整（实测刷新后仍 15 份合同；IndexedDB 主引擎）；设置页与页脚显示「IndexedDB / 容量 / 记录数」。
-- [x] **17.** 便携模式（file://）双击不白屏；便携横幅可见；存储不可用时明确提示、写入入口禁用，不谎报保存成功（内存只读实测）。
-- [x] **18.** 便携模式移动 HTML 后，按 README 第 6 节用导出的备份完整恢复（导入流程已在 localhost 与 file:// 页面验证；不同浏览器 file:// 存储行为不一致，以导出备份为准）。
-- [x] **19.** 路由全部 hash 形式，刷新与前进/后退不白屏；零 CDN、零外链字体、零外链图标，断网功能完整。
-- [x] **20.** README 十二章齐全，自检清单逐条打勾，含依赖版本与实测产物大小。
+任一断言失败都会以非零退出码结束；`npm run check` 会打印每项断言结果与当前产物体积。
 
 ---
 
@@ -517,5 +476,9 @@ dist/ 文件数：1（index.html）
 3. **附件**：按需求只记录文件名 / 大小 / 备注元信息，不上传、不写入真实文件路径。
 4. **收款口径**：登记收款会同步累加合同已收金额并写流水；若手工直接修改已收金额而不登记流水，月度收款趋势图不会包含这部分调整。
 5. **localStorage 降级**：仅为小数据量兜底，配额写满会停止录入并提示导出；不要把 localStorage 当作 IndexedDB 的等价替身。
-6. **便携模式**：不同浏览器对 `file://` 的存储 origin 处理不同（Edge/Chromium 实测可持久化；其他浏览器可能降级或隔离）。正式使用请用 localhost，并定期导出备份。
+6. **便携模式**：不同浏览器对 `file://` 的存储 origin 处理不同，可能持久化、降级为 localStorage 或进入只读。正式使用请用 localhost，并定期导出备份。
 7. **清空语义**：清空全部数据会保留系统设置（含 AI 配置），并把字典重置为内置项，避免出现无状态可选、应用不可用的情况。
+8. **两条执行轴维护方式不对称**：`deliveredAmount` 只读、仅由交付明细维护；`receivedAmount` 仍可在合同表单手工编辑。手工改已收金额不会产生资金流水，月度趋势图也不包含该调整，建议始终用「登记收款 / 付款」维护。
+9. **采购对方**：供应商字段仍是自由文本 + 历史联想，没有供应商主数据档案（无唯一性、引用保护与转交语义）。
+10. **执行计划与核销**：只记录实际发生的资金流水与交付明细，不含付款 / 交付计划节点，也不做流水与交付的一对一核销。
+11. **交付验收人**：交付明细暂无独立「验收人」字段，验收信息以明细备注与合同负责人表达。
