@@ -1,6 +1,6 @@
 import dayjs from 'dayjs'
-import { APP_ID, SCHEMA_VERSION } from '../data/schema'
-import { isFiniteNumber, roundMoney } from './format'
+import { APP_ID, CONTRACT_DIRECTIONS, DELIVERY_STATUS_META, SCHEMA_VERSION } from '../data/schema'
+import { formatMoney, isFiniteNumber, roundMoney } from './format'
 
 /**
  * 是否为空值（字符串仅含空白视为空）。
@@ -97,6 +97,18 @@ export function contractRules({ contracts = [], currentId = '', precision = 2, g
           if (!hasValidPrecision(value, precision)) {
             return callback(new Error(`合同金额最多支持 ${precision} 位小数`))
           }
+          // 合同金额不得低于已收/已付或已交付金额（与领域层校验同口径，提前给出可读提示）
+          const values = getValues() || {}
+          if (isFiniteNumber(values.receivedAmount) && Number(value) < Number(values.receivedAmount)) {
+            return callback(
+              new Error(`合同金额不能低于已收/已付金额 ${formatMoney(values.receivedAmount, precision)}`),
+            )
+          }
+          if (isFiniteNumber(values.deliveredAmount) && Number(value) < Number(values.deliveredAmount)) {
+            return callback(
+              new Error(`合同金额不能低于已交付金额 ${formatMoney(values.deliveredAmount, precision)}`),
+            )
+          }
           callback()
         },
         trigger: 'change',
@@ -183,6 +195,40 @@ export function paymentRules({ getMax = () => Number.POSITIVE_INFINITY, precisio
     ],
     date: [{ required: true, message: '请选择收款日期', trigger: 'change' }],
     methodCode: [{ required: true, message: '请选择付款方式', trigger: 'change' }],
+    note: [{ max: 200, message: '备注不能超过 200 个字符', trigger: 'blur' }],
+  }
+}
+
+/**
+ * 交付登记校验规则（与 paymentRules 同构：金额、日期、验收状态必填，备注限长）。
+ * 数量与单位仅作描述，不参与任何计算与校验。
+ * @param {Object} ctx
+ * @param {() => number} ctx.getMax 可交付上限（合同金额 − 已交付金额）
+ * @param {number} [ctx.precision]
+ * @returns {Object}
+ */
+export function deliveryRules({ getMax = () => Number.POSITIVE_INFINITY, precision = 2 }) {
+  return {
+    amount: [
+      {
+        validator: (_rule, value, callback) => {
+          if (isBlank(value)) return callback(new Error('交付金额不能为空'))
+          if (!isFiniteNumber(value)) return callback(new Error('交付金额必须是数字'))
+          if (Number(value) <= 0) return callback(new Error('交付金额必须大于 0'))
+          if (!hasValidPrecision(value, precision)) {
+            return callback(new Error(`交付金额最多支持 ${precision} 位小数`))
+          }
+          const max = Number(getMax())
+          if (Number.isFinite(max) && Number(value) > roundMoney(max, precision) + 1e-9) {
+            return callback(new Error(`本次交付不能超过剩余可交付金额 ${roundMoney(max, precision)} 元`))
+          }
+          callback()
+        },
+        trigger: 'change',
+      },
+    ],
+    date: [{ required: true, message: '请选择交付日期', trigger: 'change' }],
+    status: [{ required: true, message: '请选择验收状态', trigger: 'change' }],
     note: [{ max: 200, message: '备注不能超过 200 个字符', trigger: 'blur' }],
   }
 }
@@ -320,7 +366,7 @@ export function validateBackup(payload, options = {}) {
   /** @type {string[]} */
   const warnings = []
   /** @type {Object<string, number>} */
-  const counts = { contracts: 0, payments: 0, personnel: 0, dicts: 0 }
+  const counts = { contracts: 0, payments: 0, deliveries: 0, personnel: 0, dicts: 0 }
 
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return { ok: false, errors: ['文件内容不是合法的 JSON 对象'], warnings, counts }
@@ -355,6 +401,10 @@ export function validateBackup(payload, options = {}) {
   }
 
   // ---- 合同 ----
+  // 版本分支：v2 起方向与交付字段必填且严格校验；v1 缺失只记警告（导入后由迁移补齐）
+  const isV2 = Number.isInteger(version) && version >= 2
+  let v1MissingDirection = 0
+  let v1MissingDelivered = 0
   const contracts = requireArray('contracts', '合同')
   const contractIds = new Set()
   contracts.forEach((c, i) => {
@@ -374,6 +424,25 @@ export function validateBackup(payload, options = {}) {
     } else if (isFiniteNumber(c.amount) && Number(c.receivedAmount) > Number(c.amount) + 1e-9) {
       warnings.push(`${path}.receivedAmount 大于合同金额，请导入后核对`)
     }
+    if (isV2) {
+      if (c.direction !== CONTRACT_DIRECTIONS.SALE && c.direction !== CONTRACT_DIRECTIONS.PURCHASE) {
+        errors.push(`${path}.direction 必须为 sale 或 purchase`)
+      }
+      if (!isFiniteNumber(c.deliveredAmount) || Number(c.deliveredAmount) < 0) {
+        errors.push(`${path}.deliveredAmount 应为不小于 0 的数字`)
+      } else if (isFiniteNumber(c.amount) && Number(c.deliveredAmount) > Number(c.amount) + 1e-9) {
+        errors.push(`${path}.deliveredAmount 不能大于合同金额`)
+      }
+      if (c.lastDeliveryDate !== undefined && c.lastDeliveryDate !== '' && !isDateString(c.lastDeliveryDate)) {
+        errors.push(`${path}.lastDeliveryDate 应为 YYYY-MM-DD 日期`)
+      }
+    } else {
+      if (c.direction === undefined) v1MissingDirection += 1
+      if (c.deliveredAmount === undefined) v1MissingDelivered += 1
+      if (c.lastDeliveryDate !== undefined && c.lastDeliveryDate !== '' && !isDateString(c.lastDeliveryDate)) {
+        warnings.push(`${path}.lastDeliveryDate 格式非法，导入后将被规范`)
+      }
+    }
     if (!isDateString(c.signDate)) errors.push(`${path}.signDate 应为 YYYY-MM-DD 日期`)
     if (!isDateString(c.dueDate)) errors.push(`${path}.dueDate 应为 YYYY-MM-DD 日期`)
     if (c.startDate && !isDateString(c.startDate)) errors.push(`${path}.startDate 应为 YYYY-MM-DD 日期`)
@@ -383,6 +452,12 @@ export function validateBackup(payload, options = {}) {
     if (!isTimestamp(c.createdAt)) errors.push(`${path}.createdAt 缺失或格式非法`)
     if (!isTimestamp(c.updatedAt)) errors.push(`${path}.updatedAt 缺失或格式非法`)
   })
+  if (!isV2 && v1MissingDirection > 0) {
+    warnings.push(`v1 备份：${v1MissingDirection} 份合同缺少 direction，导入后按合同类型推断（purchase → 采购，其余销售）`)
+  }
+  if (!isV2 && v1MissingDelivered > 0) {
+    warnings.push(`v1 备份：${v1MissingDelivered} 份合同缺少 deliveredAmount，导入后补 0`)
+  }
 
   // ---- 收款 ----
   const payments = requireArray('payments', '收款记录')
@@ -399,6 +474,49 @@ export function validateBackup(payload, options = {}) {
     if (!isDateString(p.date)) errors.push(`${path}.date 应为 YYYY-MM-DD 日期`)
     if (!isTimestamp(p.createdAt)) errors.push(`${path}.createdAt 缺失或格式非法`)
     if (!isTimestamp(p.updatedAt)) errors.push(`${path}.updatedAt 缺失或格式非法`)
+  })
+
+  // ---- 交付执行明细 ----
+  // v2 起为必需集合；v1 备份允许缺失（只记警告），存在时仍按结构校验但降级为警告
+  /** @type {Array<Object>} */
+  let deliveries = []
+  if (Array.isArray(data.deliveries)) {
+    deliveries = data.deliveries
+    counts.deliveries = deliveries.length
+  } else if (isV2) {
+    errors.push('data.deliveries 应为数组（交付执行明细）')
+  } else if (data.deliveries !== undefined) {
+    warnings.push('data.deliveries 不是数组，导入后将被忽略并补为空数组')
+  } else {
+    warnings.push('v1 备份缺少 deliveries 集合，导入后补为空数组')
+  }
+  const reportDeliveryIssue = (message) => {
+    if (isV2) errors.push(message)
+    else warnings.push(`${message}（v1 备份，导入后规范）`)
+  }
+  const deliveryIds = new Set()
+  deliveries.forEach((d, i) => {
+    const path = `deliveries[${i}]`
+    if (!d || typeof d !== 'object') return reportDeliveryIssue(`${path} 不是合法对象`)
+    if (isBlank(d.id)) reportDeliveryIssue(`${path}.id 缺失`)
+    else if (deliveryIds.has(d.id)) reportDeliveryIssue(`${path}.id 重复：${d.id}`)
+    else deliveryIds.add(d.id)
+    if (isBlank(d.contractId)) reportDeliveryIssue(`${path}.contractId 缺失`)
+    else if (!contractIds.has(d.contractId)) {
+      reportDeliveryIssue(`${path}.contractId 指向不存在的合同：${d.contractId}`)
+    }
+    if (!isFiniteNumber(d.amount) || Number(d.amount) <= 0) {
+      reportDeliveryIssue(`${path}.amount 应为大于 0 的数字`)
+    }
+    if (!isDateString(d.date)) reportDeliveryIssue(`${path}.date 应为 YYYY-MM-DD 日期`)
+    if (!DELIVERY_STATUS_META[d.status]) {
+      reportDeliveryIssue(`${path}.status 必须为 delivered / accepted / rejected`)
+    }
+    if (!isTimestamp(d.createdAt)) reportDeliveryIssue(`${path}.createdAt 缺失或格式非法`)
+    if (!isTimestamp(d.updatedAt)) reportDeliveryIssue(`${path}.updatedAt 缺失或格式非法`)
+    if (d.quantity !== undefined && d.quantity !== null && !isFiniteNumber(d.quantity)) {
+      reportDeliveryIssue(`${path}.quantity 应为数字或 null`)
+    }
   })
 
   // ---- 人员 ----

@@ -1,4 +1,4 @@
-import { APP_ID, SCHEMA_VERSION, normalizeSettings } from './schema'
+import { APP_ID, SCHEMA_VERSION, migrateDataset, normalizeDirection, normalizeSettings } from './schema'
 import { applyChanges, countsOf, mergeDatasets, snapshot } from './store'
 import { backupFileName, snapshotFileName } from '../utils/format'
 import { nowIso } from '../utils/id'
@@ -24,7 +24,7 @@ export function sanitizeSettingsForBackup(settings) {
 }
 
 /**
- * 构造备份对象（含字典、人员、设置；不含 meta）。
+ * 构造备份对象（含合同、资金流水、交付明细、字典、人员、设置；不含 meta）。
  * @returns {Object}
  */
 export function buildBackupPayload() {
@@ -36,6 +36,7 @@ export function buildBackupPayload() {
     data: {
       contracts: snap.contracts,
       payments: snap.payments,
+      deliveries: snap.deliveries,
       personnel: snap.personnel,
       dicts: snap.dicts,
       settings: sanitizeSettingsForBackup(snap.settings),
@@ -80,6 +81,7 @@ export async function exportBackup() {
   const counts = countsOf({
     contracts: payload.data.contracts,
     payments: payload.data.payments,
+    deliveries: payload.data.deliveries,
     personnel: payload.data.personnel,
     dicts: payload.data.dicts,
   })
@@ -159,10 +161,48 @@ export function parseBackupText(text) {
 }
 
 /**
+ * 合并导入前的方向冲突预检。
+ * `mergeDatasets()` 只按 id 与 updatedAt 取新，无法感知方向语义；
+ * 因此这里在调用合并前预检：若同一 id 的合同方向不同，且本机该合同已有资金流水或交付明细，
+ * 就保留本机合同（不写入备份版本），并计入「保留条数」，绝不静默翻转方向。
+ * @param {Object} current 本机数据集快照
+ * @param {Array<Object>} incomingContracts 备份中的合同
+ * @returns {{contracts:Array<Object>, conflicts:Array<Object>, kept:number}}
+ */
+function precheckDirectionConflicts(current, incomingContracts) {
+  const currentMap = new Map((current.contracts || []).map((contract) => [contract.id, contract]))
+  const paymentContractIds = new Set((current.payments || []).map((payment) => payment.contractId))
+  const deliveryContractIds = new Set((current.deliveries || []).map((delivery) => delivery.contractId))
+  const conflicts = []
+  const contracts = []
+  for (const record of incomingContracts || []) {
+    const local = record?.id ? currentMap.get(record.id) : null
+    if (!local) {
+      contracts.push(record)
+      continue
+    }
+    const sameDirection = normalizeDirection(local.direction) === normalizeDirection(record.direction)
+    const hasExecution = paymentContractIds.has(local.id) || deliveryContractIds.has(local.id)
+    if (!sameDirection && hasExecution) {
+      conflicts.push({
+        id: local.id,
+        no: local.no || '',
+        customer: local.customer || '',
+        localDirection: normalizeDirection(local.direction),
+        backupDirection: normalizeDirection(record.direction),
+      })
+      continue
+    }
+    contracts.push(record)
+  }
+  return { contracts, conflicts, kept: conflicts.length }
+}
+
+/**
  * 导入备份（事务写入，失败整体回滚）。
  * @param {Object} payload 已通过结构校验的备份对象
  * @param {'overwrite'|'merge'} mode
- * @returns {Promise<{ok:boolean, mode:string, counts?:Object, message:string, code?:string, details?:Object}>}
+ * @returns {Promise<{ok:boolean, mode:string, counts?:Object, message:string, code?:string, details?:Object, summary?:string, conflicts?:Array<Object>}>}
  */
 export async function importBackup(payload, mode) {
   const validation = validateBackup(payload, { schemaVersion: SCHEMA_VERSION })
@@ -174,20 +214,34 @@ export async function importBackup(payload, mode) {
   }
 
   const current = snapshot()
-  const imported = {
+  // v1 备份缺少方向与交付字段：先过一遍幂等迁移，保证导入后立即可按方向展示（而不是等下次启动）
+  const importedDataset = migrateDataset({
     contracts: payload.data.contracts,
     payments: payload.data.payments,
+    deliveries: Array.isArray(payload.data.deliveries) ? payload.data.deliveries : [],
     personnel: payload.data.personnel,
     dicts: payload.data.dicts,
     settings: payload.data.settings,
+    meta: { ...current.meta, schemaVersion: payload.schemaVersion || 1 },
+  }).dataset
+  const imported = {
+    contracts: importedDataset.contracts,
+    payments: importedDataset.payments,
+    deliveries: importedDataset.deliveries,
+    personnel: importedDataset.personnel,
+    dicts: importedDataset.dicts,
+    settings: importedDataset.settings,
   }
 
   let next
   let details
+  let conflicts = []
+  let summary = ''
   if (mode === 'overwrite') {
     next = {
       contracts: imported.contracts,
       payments: imported.payments,
+      deliveries: imported.deliveries,
       personnel: imported.personnel,
       dicts: imported.dicts,
       settings: normalizeSettings({
@@ -201,10 +255,14 @@ export async function importBackup(payload, mode) {
         lastImportAt: nowIso(),
       },
     }
-    details = { added: imported.contracts.length, updated: 0, kept: 0 }
+    details = { added: imported.contracts.length, updated: 0, kept: 0, directionKept: 0 }
+    summary = `覆盖导入：已整体替换为备份数据，共 ${imported.contracts.length} 份合同、${imported.deliveries.length} 条交付明细。`
   } else {
+    const precheck = precheckDirectionConflicts(current, imported.contracts)
+    conflicts = precheck.conflicts
     const merged = mergeDatasets(current, {
       ...imported,
+      contracts: precheck.contracts,
       meta: { ...current.meta, seeded: true },
     })
     next = merged.dataset
@@ -218,10 +276,23 @@ export async function importBackup(payload, mode) {
       lastImportAt: nowIso(),
       storageEngine: current.meta.storageEngine,
     }
-    details = { added: merged.added, updated: merged.updated, kept: merged.kept }
+    details = {
+      added: merged.added,
+      updated: merged.updated,
+      kept: merged.kept + precheck.kept,
+      directionKept: precheck.kept,
+    }
+    summary = `合并导入：新增 ${details.added} 条，更新 ${details.updated} 条，保留 ${details.kept} 条`
+    if (precheck.conflicts.length) {
+      const names = precheck.conflicts
+        .slice(0, 3)
+        .map((item) => item.no || item.customer || item.id)
+        .join('、')
+      summary += `；其中 ${precheck.conflicts.length} 份合同（${names}${precheck.conflicts.length > 3 ? ' 等' : ''}）因本机已有执行记录，保留本机方向`
+    }
   }
 
-  const result = await applyChanges({ replace: next }, { touch: false })
+  const result = await applyChanges({ replace: migrateDataset(next).dataset }, { touch: false })
   if (!result.ok) {
     return {
       ok: false,
@@ -234,11 +305,10 @@ export async function importBackup(payload, mode) {
   return {
     ok: true,
     mode,
-    counts: countsOf(next),
+    counts: countsOf(snapshot()),
     details,
-    message:
-      mode === 'overwrite'
-        ? '导入完成（覆盖模式），现有数据已整体替换'
-        : `导入完成（合并模式）：新增 ${details.added} 条，更新 ${details.updated} 条，保留较新 ${details.kept} 条`,
+    conflicts,
+    summary,
+    message: summary,
   }
 }

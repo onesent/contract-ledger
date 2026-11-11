@@ -14,9 +14,17 @@ import {
 } from '../data/store'
 import {
   CONTRACT_COLUMNS,
+  CONTRACT_DIRECTIONS,
+  DELIVERY_STATUS,
+  DELIVERY_STATUS_META,
+  DIRECTION_LABELS,
+  FUNDING_LABELS,
+  PARTY_LABELS,
   STATUS_CODES,
+  contractColumns,
   createDemoDataset,
   emptyDataset,
+  normalizeDirection,
   normalizeSettings,
 } from '../data/schema'
 import {
@@ -27,13 +35,17 @@ import {
   sanitizeSettingsForBackup,
 } from '../data/backup'
 import { nowIso, uuid } from '../utils/id'
-import { formatMoney, roundMoney, toNumber } from '../utils/format'
+import { formatMoney, isFiniteNumber, roundMoney, toNumber } from '../utils/format'
 import {
   QUICK_FILTERS,
   REMINDER_GROUPS,
   computeReminders,
   computeStats,
   dataQualityIssues,
+  deliveryPercent,
+  executionGap,
+  fundingPercent,
+  gapState,
   groupByDict,
   isDueSoon,
   isOverdue,
@@ -41,7 +53,6 @@ import {
   matchesQuick,
   monthlyTrend,
   overdueDaysOf,
-  paymentPercent,
   paymentState,
   unpaidAmount,
 } from '../utils/derive'
@@ -170,6 +181,7 @@ export function createLedger() {
     const owner = personnelLookup.value.get(contract.ownerId)
     return {
       ...contract,
+      direction: normalizeDirection(contract.direction),
       typeName: type?.name || contract.typeCode || '—',
       typeColor: type?.color || '#909399',
       statusName: state?.name || contract.statusCode || '—',
@@ -177,8 +189,14 @@ export function createLedger() {
       ownerName: contract.ownerName || owner?.name || '—',
       ownerActive: owner ? owner.active !== false : false,
       unpaid: unpaidAmount(contract),
-      percent: paymentPercent(contract),
+      deliveredAmount: roundMoney(toNumber(contract.deliveredAmount, 0), precision.value),
+      lastDeliveryDate: contract.lastDeliveryDate || '',
+      fundingPercent: fundingPercent(contract),
+      deliveryPercent: deliveryPercent(contract),
+      executionGap: executionGap(contract),
+      gapState: gapState(contract),
       paymentState: paymentState(contract),
+      deliveryState: paymentState({ ...contract, receivedAmount: contract.deliveredAmount }),
       overdue: isOverdue(contract, data.dicts),
       dueSoon: isDueSoon(contract, data.settings.reminderDays, data.dicts),
       stale: isStaleStatus(contract, data.settings.staleDays),
@@ -188,6 +206,17 @@ export function createLedger() {
   }
 
   const contracts = computed(() => data.contracts.map(enrich))
+
+  /** 按方向分组的合同（派生对象，供销售 / 采购两个入口直接消费）。 */
+  const contractsByDirection = computed(() => {
+    /** @type {{sale:Array<Object>, purchase:Array<Object>}} */
+    const grouped = { [CONTRACT_DIRECTIONS.SALE]: [], [CONTRACT_DIRECTIONS.PURCHASE]: [] }
+    for (const contract of contracts.value) {
+      if (contract.direction === CONTRACT_DIRECTIONS.PURCHASE) grouped[CONTRACT_DIRECTIONS.PURCHASE].push(contract)
+      else grouped[CONTRACT_DIRECTIONS.SALE].push(contract)
+    }
+    return grouped
+  })
 
   const customerSuggestions = computed(() => {
     const set = new Set()
@@ -228,6 +257,108 @@ export function createLedger() {
   const typeDistribution = computed(() => groupByDict(data.contracts, 'typeCode', data.dicts))
   const statusDistribution = computed(() => groupByDict(data.contracts, 'statusCode', data.dicts))
 
+  // ---------- 方向维度派生视图（销售 / 采购分别计算，不合并金额） ----------
+  const statsFor = (direction) =>
+    computeStats({
+      contracts: data.contracts,
+      payments: data.payments,
+      settings: data.settings,
+      dicts: data.dicts,
+      direction,
+    })
+
+  const remindersFor = (direction) =>
+    computeReminders({
+      contracts: data.contracts,
+      settings: data.settings,
+      dicts: data.dicts,
+      ignored: ignoredKeys.value,
+      direction,
+    })
+
+  const trendFor = (direction) =>
+    monthlyTrend({ contracts: data.contracts, payments: data.payments, months: 12, direction })
+
+  const statsByDirection = computed(() => ({
+    [CONTRACT_DIRECTIONS.SALE]: statsFor(CONTRACT_DIRECTIONS.SALE),
+    [CONTRACT_DIRECTIONS.PURCHASE]: statsFor(CONTRACT_DIRECTIONS.PURCHASE),
+  }))
+
+  const remindersByDirection = computed(() => ({
+    [CONTRACT_DIRECTIONS.SALE]: remindersFor(CONTRACT_DIRECTIONS.SALE),
+    [CONTRACT_DIRECTIONS.PURCHASE]: remindersFor(CONTRACT_DIRECTIONS.PURCHASE),
+  }))
+
+  const trendByDirection = computed(() => ({
+    [CONTRACT_DIRECTIONS.SALE]: trendFor(CONTRACT_DIRECTIONS.SALE),
+    [CONTRACT_DIRECTIONS.PURCHASE]: trendFor(CONTRACT_DIRECTIONS.PURCHASE),
+  }))
+
+  const typeDistributionByDirection = computed(() => ({
+    [CONTRACT_DIRECTIONS.SALE]: groupByDict(
+      data.contracts,
+      'typeCode',
+      data.dicts,
+      CONTRACT_DIRECTIONS.SALE,
+    ),
+    [CONTRACT_DIRECTIONS.PURCHASE]: groupByDict(
+      data.contracts,
+      'typeCode',
+      data.dicts,
+      CONTRACT_DIRECTIONS.PURCHASE,
+    ),
+  }))
+
+  const statusDistributionByDirection = computed(() => ({
+    [CONTRACT_DIRECTIONS.SALE]: groupByDict(
+      data.contracts,
+      'statusCode',
+      data.dicts,
+      CONTRACT_DIRECTIONS.SALE,
+    ),
+    [CONTRACT_DIRECTIONS.PURCHASE]: groupByDict(
+      data.contracts,
+      'statusCode',
+      data.dicts,
+      CONTRACT_DIRECTIONS.PURCHASE,
+    ),
+  }))
+
+  /**
+   * 某合同的交付执行明细（按交付日期倒序，供详情抽屉直接渲染）。
+   * @param {string} contractId
+   * @returns {Array<Object>}
+   */
+  function deliveriesFor(contractId) {
+    return (data.deliveries || [])
+      .filter((item) => item.contractId === contractId)
+      .slice()
+      .sort((a, b) => {
+        if (a.date !== b.date) return a.date < b.date ? 1 : -1
+        return String(b.createdAt || '').localeCompare(String(a.createdAt || ''))
+      })
+  }
+
+  /** 方向名称：销售合同 / 采购合同。 */
+  function directionLabel(direction) {
+    return DIRECTION_LABELS[normalizeDirection(direction)]
+  }
+
+  /** 对方称谓：客户 / 供应商。 */
+  function partyLabel(direction) {
+    return PARTY_LABELS[normalizeDirection(direction)]
+  }
+
+  /** 资金轴标签：{ received, unpaid, progress, date, verb }。 */
+  function fundingLabels(direction) {
+    return { ...FUNDING_LABELS[normalizeDirection(direction)] }
+  }
+
+  /** 某方向的表格列定义（prop 与销售默认一致）。 */
+  function columnsFor(direction) {
+    return contractColumns(normalizeDirection(direction))
+  }
+
   const backupDue = computed(() => {
     const rule = data.settings.autoBackup || {}
     if (rule.enabled === false) return false
@@ -259,7 +390,7 @@ export function createLedger() {
   const operator = () => text(data.settings.operatorName) || '本机用户'
 
   /**
-   * 构造合同记录（含状态日志、负责人姓名快照）。
+   * 构造合同记录（含状态日志、负责人姓名快照、方向锁定与金额下限校验）。
    * @param {Object} input
    * @returns {{ok:boolean, record?:Object, message?:string, code?:string}}
    */
@@ -267,6 +398,18 @@ export function createLedger() {
     const existing = input?.id ? data.contracts.find((item) => item.id === input.id) : null
     if (input?.id && !existing) {
       return { ok: false, code: 'NOT_FOUND', message: '合同不存在或已被删除' }
+    }
+    const direction = text(input.direction) || normalizeDirection(existing?.direction)
+    if (direction !== CONTRACT_DIRECTIONS.SALE && direction !== CONTRACT_DIRECTIONS.PURCHASE) {
+      return { ok: false, code: 'DIRECTION_INVALID', message: '合同方向只能是销售或采购' }
+    }
+    if (existing && normalizeDirection(existing.direction) !== direction) {
+      // 方向锁定：已有资金流水或交付明细的合同不允许翻转方向，避免统计口径错位
+      const hasPayments = data.payments.some((item) => item.contractId === existing.id)
+      const hasDeliveries = (data.deliveries || []).some((item) => item.contractId === existing.id)
+      if (hasPayments || hasDeliveries) {
+        return { ok: false, code: 'DIRECTION_LOCKED', message: '该合同已有执行记录，方向不可更改' }
+      }
     }
     const ownerId = text(input.ownerId)
     const owner = personnelLookup.value.get(ownerId)
@@ -288,14 +431,19 @@ export function createLedger() {
     }
     const amount = roundMoney(toNumber(input.amount, 0), precision.value)
     const received = roundMoney(toNumber(input.receivedAmount, 0), precision.value)
+    // 已交付金额只能由交付明细维护，保存时一律沿用库中汇总值
+    const delivered = roundMoney(toNumber(existing?.deliveredAmount, 0), precision.value)
     const record = {
       id: existing?.id || uuid(),
       no: text(input.no),
       customer: text(input.customer),
+      direction,
       typeCode: text(input.typeCode),
       amount,
       receivedAmount: received,
       paymentDate: text(input.paymentDate) || text(existing?.paymentDate),
+      deliveredAmount: delivered,
+      lastDeliveryDate: existing?.lastDeliveryDate || '',
       signDate: text(input.signDate),
       startDate: text(input.startDate) || text(input.signDate),
       dueDate: text(input.dueDate),
@@ -318,8 +466,19 @@ export function createLedger() {
     if (record.dueDate < (record.startDate || record.signDate)) {
       return { ok: false, code: 'DATE_ORDER', message: '到期日不能早于开始日期' }
     }
-    if (received > amount) {
-      return { ok: false, code: 'AMOUNT_LOGIC', message: '已收金额不能大于合同金额' }
+    if (amount < received) {
+      return {
+        ok: false,
+        code: 'AMOUNT_BELOW_RECEIVED',
+        message: `合同金额不能低于已收/已付金额，还差 ${formatMoney(received - amount, precision.value)}`,
+      }
+    }
+    if (amount < delivered) {
+      return {
+        ok: false,
+        code: 'AMOUNT_BELOW_DELIVERED',
+        message: `合同金额不能低于已交付金额，还差 ${formatMoney(delivered - amount, precision.value)}`,
+      }
     }
     return { ok: true, record }
   }
@@ -350,6 +509,8 @@ export function createLedger() {
       statusCode: STATUS_CODES.DRAFT,
       receivedAmount: 0,
       paymentDate: '',
+      deliveredAmount: 0,
+      lastDeliveryDate: '',
       statusChangedAt: null,
       statusLogs: [],
       attachments: [],
@@ -359,7 +520,7 @@ export function createLedger() {
   }
 
   /**
-   * 批量删除合同（同时删除关联收款流水）。
+   * 批量删除合同（同一次事务删除关联收款流水与交付明细）。
    * @param {string[]} ids
    * @returns {Promise<Object>}
    */
@@ -367,11 +528,14 @@ export function createLedger() {
     const set = new Set(ids || [])
     if (!set.size) return { ok: false, message: '未选择合同' }
     const paymentIds = data.payments.filter((payment) => set.has(payment.contractId)).map((payment) => payment.id)
+    const deliveryIds = (data.deliveries || [])
+      .filter((delivery) => set.has(delivery.contractId))
+      .map((delivery) => delivery.id)
     const result = await applyChanges({
-      remove: { contracts: [...set], payments: paymentIds },
+      remove: { contracts: [...set], payments: paymentIds, deliveries: deliveryIds },
     })
     if (!result.ok) return result
-    return { ok: true, contracts: set.size, payments: paymentIds.length }
+    return { ok: true, contracts: set.size, payments: paymentIds.length, deliveries: deliveryIds.length }
   }
 
   /**
@@ -483,6 +647,90 @@ export function createLedger() {
     }
     const result = await applyChanges({
       remove: { payments: [paymentId] },
+      put: { contracts: [nextContract] },
+    })
+    if (!result.ok) return result
+    return { ok: true, contract: nextContract }
+  }
+
+  /**
+   * 登记交付执行明细：追加明细并累加合同已交付金额（同一次事务写入）。
+   * 验收驳回（rejected）的明细保留可追溯，但不计入已交付金额。
+   * @param {{contractId:string, date:string, amount:number, quantity?:number|null, unit?:string, status?:string, note?:string}} input
+   * @returns {Promise<Object>}
+   */
+  async function registerDelivery(input) {
+    const contract = data.contracts.find((item) => item.id === input?.contractId)
+    if (!contract) return { ok: false, message: '合同不存在' }
+    const amount = roundMoney(toNumber(input.amount, 0), precision.value)
+    if (!(amount > 0)) return { ok: false, message: '交付金额必须大于 0' }
+    const delivered = roundMoney(toNumber(contract.deliveredAmount, 0), precision.value)
+    const remaining = roundMoney(toNumber(contract.amount, 0) - delivered, precision.value)
+    if (amount > remaining + 1e-9) {
+      return { ok: false, message: `本次交付不能超过剩余可交付金额 ${formatMoney(remaining, precision.value)}` }
+    }
+    const date = text(input.date)
+    if (!date) return { ok: false, message: '请选择交付日期' }
+    const status = text(input.status) || DELIVERY_STATUS.DELIVERED
+    if (!Object.values(DELIVERY_STATUS).includes(status)) {
+      return { ok: false, code: 'DELIVERY_STATUS_INVALID', message: '交付验收状态不合法' }
+    }
+    const quantity = isFiniteNumber(input.quantity) ? Number(input.quantity) : null
+    const now = nowIso()
+    const delivery = {
+      id: uuid(),
+      contractId: contract.id,
+      date,
+      amount,
+      quantity,
+      unit: text(input.unit),
+      status,
+      note: text(input.note),
+      createdAt: now,
+      updatedAt: now,
+    }
+    const counted = status !== DELIVERY_STATUS.REJECTED
+    const lastDeliveryDate =
+      counted && (!contract.lastDeliveryDate || dayjs(date).isAfter(dayjs(contract.lastDeliveryDate)))
+        ? date
+        : contract.lastDeliveryDate || ''
+    const nextContract = {
+      ...contract,
+      deliveredAmount: counted ? roundMoney(delivered + amount, precision.value) : delivered,
+      lastDeliveryDate,
+    }
+    const result = await applyChanges({ put: { deliveries: [delivery], contracts: [nextContract] } })
+    if (!result.ok) return result
+    return { ok: true, delivery, contract: nextContract }
+  }
+
+  /**
+   * 删除一条交付明细，并按剩余明细重算已交付金额与最后交付日期。
+   * 重算而非减法，保证连续删除后汇总始终与明细一致。
+   * @param {string} deliveryId
+   * @returns {Promise<Object>}
+   */
+  async function deleteDelivery(deliveryId) {
+    const delivery = (data.deliveries || []).find((item) => item.id === deliveryId)
+    if (!delivery) return { ok: false, message: '交付记录不存在' }
+    const contract = data.contracts.find((item) => item.id === delivery.contractId)
+    if (!contract) return { ok: false, message: '关联合同不存在' }
+    const rest = (data.deliveries || []).filter(
+      (item) => item.contractId === contract.id && item.id !== deliveryId,
+    )
+    const counted = rest.filter((item) => item.status !== DELIVERY_STATUS.REJECTED)
+    const deliveredAmount = roundMoney(
+      counted.reduce((sum, item) => sum + toNumber(item.amount, 0), 0),
+      precision.value,
+    )
+    const latest = counted.map((item) => item.date).filter(Boolean).sort().at(-1) || ''
+    const nextContract = {
+      ...contract,
+      deliveredAmount,
+      lastDeliveryDate: latest,
+    }
+    const result = await applyChanges({
+      remove: { deliveries: [deliveryId] },
       put: { contracts: [nextContract] },
     })
     if (!result.ok) return result
@@ -834,6 +1082,7 @@ export function createLedger() {
     status,
     precision,
     contracts,
+    contractsByDirection,
     customerSuggestions,
     personnelLookup,
     activePersonnel,
@@ -846,11 +1095,16 @@ export function createLedger() {
     statusMap,
     // 统计
     stats,
+    statsByDirection,
     reminders,
+    remindersByDirection,
     reminderTotal,
     trend,
+    trendByDirection,
     typeDistribution,
+    typeDistributionByDirection,
     statusDistribution,
+    statusDistributionByDirection,
     backupDue,
     storageInfo,
     aiConfig,
@@ -859,11 +1113,23 @@ export function createLedger() {
     ignoredKeys,
     // 常量
     columns: CONTRACT_COLUMNS,
+    columnsFor,
     quickFilters: QUICK_FILTERS,
     reminderGroups: REMINDER_GROUPS,
     statusCodes: STATUS_CODES,
+    contractDirections: CONTRACT_DIRECTIONS,
+    directionLabels: DIRECTION_LABELS,
+    partyLabels: PARTY_LABELS,
+    fundingLabelMap: FUNDING_LABELS,
+    deliveryStatus: DELIVERY_STATUS,
+    deliveryStatusMeta: DELIVERY_STATUS_META,
     engineLabels: ENGINE_LABELS,
     engines: ENGINE,
+    // 方向文案
+    directionLabel,
+    partyLabel,
+    fundingLabels,
+    deliveriesFor,
     // 操作
     actions: {
       generateContractNo: () => generateContractNo(data.contracts, data.settings),
@@ -873,6 +1139,8 @@ export function createLedger() {
       bulkUpdate,
       registerPayment,
       deletePayment,
+      registerDelivery,
+      deleteDelivery,
       saveDict,
       deleteDict,
       toggleDict,

@@ -43,7 +43,7 @@
               {{ item.dueDate ? `到期 ${item.dueDate}` : '到期日缺失' }}
             </span>
             <span v-if="item.unpaid > 0" class="text-danger">
-              未收 {{ formatMoney(item.unpaid, precision) }}
+              {{ unpaidLabel }} {{ formatMoney(item.unpaid, precision) }}
             </span>
             <span v-if="item.issues && item.issues.length" class="text-warning small">
               {{ item.issues.join('；') }}
@@ -70,6 +70,8 @@ const props = defineProps({
   reminders: { type: Array, default: () => [] },
   precision: { type: Number, default: 2 },
   ignoredKeys: { type: Array, default: () => [] },
+  /** 未收/未付金额的行内标签，由调用方按方向传入。 */
+  unpaidLabel: { type: String, default: '未收' },
 })
 
 const emit = defineEmits(['jump', 'open', 'ignore', 'restore'])

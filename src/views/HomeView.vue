@@ -4,15 +4,19 @@
       <div class="page-head-text">
         <h2 class="page-title">首页看板</h2>
         <p class="page-subtitle">
-          所有数字均由合同与收款流水实时计算，可与列表逐条核对；点击统计卡或提醒条可跳转到已带筛选条件的列表。
+          所有数字均由{{ directionName }}与其执行流水实时计算，可与列表逐条核对；销售与采购分开展示，不做相加。点击统计卡或提醒条可跳转到已带筛选条件的列表。
         </p>
       </div>
       <div class="page-actions">
+        <el-radio-group v-model="direction" size="default">
+          <el-radio-button value="sale">销售合同</el-radio-button>
+          <el-radio-button value="purchase">采购合同</el-radio-button>
+        </el-radio-group>
         <el-tooltip :disabled="writable" content="仅可浏览与导出（当前为只读模式）" placement="top">
           <span>
             <el-button type="primary" :disabled="!writable" @click="goCreate">
               <el-icon><Plus /></el-icon>
-              新增合同
+              新增{{ directionName }}
             </el-button>
           </span>
         </el-tooltip>
@@ -45,7 +49,7 @@
     <el-card v-if="ledger.data.contracts.length === 0" shadow="never">
       <el-empty description="台账还是空的：可以载入演示数据体验全部功能，或直接新增第一份合同">
         <el-tooltip :disabled="writable" content="仅可浏览与导出（当前为只读模式）" placement="top">
-          <span><el-button type="primary" :disabled="!writable" @click="goCreate">新增合同</el-button></span>
+          <span><el-button type="primary" :disabled="!writable" @click="goCreate">新增{{ directionName }}</el-button></span>
         </el-tooltip>
         <el-tooltip :disabled="writable" content="仅可浏览与导出（当前为只读模式）" placement="top">
           <span><el-button :disabled="!writable" @click="loadDemo">载入演示数据</el-button></span>
@@ -56,7 +60,7 @@
     <template v-else>
       <el-row :gutter="12" class="stat-grid">
         <el-col v-for="card in statCards" :key="card.key" :xs="12" :sm="8" :md="6" :lg="4" :xl="4">
-          <el-card shadow="hover" class="stat-card" @click="card.query && go('/contracts', card.query)">
+          <el-card shadow="hover" class="stat-card" @click="card.query && go(contractsPath, card.query)">
             <div class="stat-label">
               <el-icon><component :is="card.icon" /></el-icon>
               {{ card.label }}
@@ -69,24 +73,25 @@
 
       <el-row :gutter="12">
         <el-col :xs="24" :lg="16">
-          <ChartPanel title="近 12 个月签约金额 vs 收款金额" :option="trendOption" :empty="!hasChartData" height="300px">
+          <ChartPanel :title="`近 12 个月签约金额 vs ${funding.verb}金额`" :option="trendOption" :empty="!hasChartData" height="300px">
             <template #extra>
-              <el-tag size="small" effect="plain">签约 {{ formatMoney(ledger.stats.value.totalAmount, precision) }}</el-tag>
-              <el-tag size="small" type="success" effect="plain">收款 {{ formatMoney(ledger.stats.value.receivedAmount, precision) }}</el-tag>
+              <el-tag size="small" effect="plain">签约 {{ formatMoney(stats.totalAmount, precision) }}</el-tag>
+              <el-tag size="small" type="success" effect="plain">{{ funding.verb }} {{ formatMoney(stats.receivedAmount, precision) }}</el-tag>
             </template>
           </ChartPanel>
         </el-col>
         <el-col :xs="24" :lg="8">
-          <ChartPanel title="合同类型金额占比" :option="typeOption" :empty="!hasChartData" height="300px" />
+          <ChartPanel :title="`${directionName}类型金额占比`" :option="typeOption" :empty="!hasChartData" height="300px" />
         </el-col>
       </el-row>
 
       <el-row :gutter="12">
         <el-col :xs="24" :lg="16">
           <ReminderList
-            :reminders="ledger.reminders.value"
+            :reminders="reminders"
             :precision="precision"
             :ignored-keys="ledger.ignoredKeys.value"
+            :unpaid-label="direction === 'purchase' ? '未付' : '未收'"
             @jump="jumpToContracts"
             @open="openContract"
             @ignore="ignoreReminder"
@@ -95,7 +100,7 @@
         </el-col>
         <el-col :xs="24" :lg="8">
           <div class="page" style="gap: 12px">
-            <ChartPanel title="合同状态分布" :option="statusOption" :empty="!hasChartData" height="260px" />
+            <ChartPanel :title="`${directionName}状态分布`" :option="statusOption" :empty="!hasChartData" height="260px" />
             <AiPlaceholder />
             <el-card shadow="never">
               <template #header>
@@ -106,8 +111,11 @@
               </template>
               <div class="section-actions">
                 <el-tooltip :disabled="writable" content="仅可浏览与导出（当前为只读模式）" placement="top">
-                  <span><el-button :disabled="!writable" @click="goCreate">新增合同</el-button></span>
+                  <span><el-button :disabled="!writable" @click="goCreate">新增{{ directionName }}</el-button></span>
                 </el-tooltip>
+                <el-button @click="go(contractsPath, { quick: 'all' })">
+                  {{ directionName }}列表
+                </el-button>
                 <el-button @click="exportNow">导出备份</el-button>
                 <el-button @click="go('/settings', { section: 'backup' })">导入备份</el-button>
                 <el-button @click="go('/dicts')">字典配置</el-button>
@@ -125,10 +133,11 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   AlarmClock,
+  Box,
   Calendar,
   Coin,
   Compass,
@@ -157,8 +166,25 @@ const ledger = useLedger()
 const router = useRouter()
 const settings = ledger.settings
 const precision = ledger.precision
-const stats = ledger.stats
-const hasChartData = computed(() => ledger.data.contracts.length > 0 || ledger.data.payments.length > 0)
+
+/** 当前看板方向（销售 / 采购），所有卡片、图表、提醒只统计该方向。 */
+const direction = ref('sale')
+const isPurchase = computed(() => direction.value === 'purchase')
+const directionName = computed(() => ledger.directionLabel(direction.value))
+const funding = computed(() => ledger.fundingLabels(direction.value))
+const contractsPath = computed(() => `/contracts/${direction.value}`)
+
+const stats = computed(() => ledger.statsByDirection.value[direction.value])
+const reminders = computed(() => ledger.remindersByDirection.value[direction.value])
+const trend = computed(() => ledger.trendByDirection.value[direction.value])
+const typeRows = computed(() => ledger.typeDistributionByDirection.value[direction.value])
+const statusRows = computed(() => ledger.statusDistributionByDirection.value[direction.value])
+
+const hasChartData = computed(() => {
+  const scoped = ledger.contractsByDirection.value[direction.value] || []
+  const ids = new Set(scoped.map((contract) => contract.id))
+  return scoped.length > 0 || ledger.data.payments.some((payment) => ids.has(payment.contractId))
+})
 const writable = computed(() => ledger.storageInfo.value.writable)
 
 const statCards = computed(() => {
@@ -168,7 +194,7 @@ const statCards = computed(() => {
       key: 'count',
       label: '合同总数',
       value: `${s.contractCount} 份`,
-      hint: '点击查看全部合同',
+      hint: `点击查看全部${directionName.value}`,
       icon: Document,
       query: { quick: 'all' },
     },
@@ -176,36 +202,53 @@ const statCards = computed(() => {
       key: 'totalAmount',
       label: '合同总金额',
       value: formatMoney(s.totalAmount, precision.value),
-      hint: '所有合同金额之和',
+      hint: `${directionName.value}金额之和`,
       icon: Money,
       money: true,
       query: { quick: 'all' },
     },
     {
       key: 'received',
-      label: '已收总额',
+      label: isPurchase.value ? '已付总额' : '已收总额',
       value: formatMoney(s.receivedAmount, precision.value),
-      hint: '所有合同已收金额之和',
+      hint: `所有合同${funding.value.received}之和`,
       icon: Wallet,
       money: true,
       query: { quick: 'received' },
     },
     {
       key: 'unpaid',
-      label: '未收总额',
+      label: isPurchase.value ? '未付总额' : '未收总额',
       value: formatMoney(s.unpaidAmount, precision.value),
-      hint: '存在未收金额的合同',
+      hint: isPurchase.value ? '存在未付金额的合同' : '存在未收金额的合同',
       icon: Coin,
       money: true,
       query: { quick: 'unpaid' },
     },
     {
       key: 'rate',
-      label: '整体收款率',
+      label: isPurchase.value ? '整体付款率' : '整体收款率',
       value: s.paymentRate === null ? '—' : formatPercent(s.paymentRate, 1),
-      hint: '已收总额 / 合同总金额',
+      hint: `${funding.value.received} / 合同总金额`,
       icon: TrendCharts,
       query: { quick: 'unpaid' },
+    },
+    {
+      key: 'delivered',
+      label: '已交付金额',
+      value: formatMoney(s.deliveredAmount, precision.value),
+      hint: isPurchase.value ? '所有合同已到货金额之和' : '所有合同已交付金额之和',
+      icon: Box,
+      money: true,
+      query: { quick: 'all' },
+    },
+    {
+      key: 'deliveryRate',
+      label: '整体交付率',
+      value: s.deliveryRate === null ? '—' : formatPercent(s.deliveryRate, 1),
+      hint: '已交付金额 / 合同总金额',
+      icon: Box,
+      query: { quick: 'all' },
     },
     {
       key: 'executing',
@@ -241,9 +284,9 @@ const statCards = computed(() => {
     },
     {
       key: 'overdueUnpaid',
-      label: '逾期未收金额',
+      label: isPurchase.value ? '逾期未付金额' : '逾期未收金额',
       value: formatMoney(s.overdueUnpaidAmount, precision.value),
-      hint: `超过 ${settings.value.overdueDays} 天未收款`,
+      hint: `超过 ${settings.value.overdueDays} 天未${funding.value.verb}`,
       icon: PieChart,
       money: true,
       query: { quick: 'overdueUnpaid' },
@@ -252,17 +295,18 @@ const statCards = computed(() => {
 })
 
 const trendOption = computed(() => {
-  const trend = ledger.trend.value
+  const series = trend.value
+  const receivedName = `${funding.value.verb}金额`
   return {
     tooltip: {
       trigger: 'axis',
       valueFormatter: (value) => formatMoney(value, precision.value),
     },
-    legend: { data: ['签约金额', '收款金额'], bottom: 0 },
+    legend: { data: ['签约金额', receivedName], bottom: 0 },
     grid: { left: 12, right: 20, top: 24, bottom: 42, containLabel: true },
     xAxis: {
       type: 'category',
-      data: trend.labels,
+      data: series.labels,
       axisLabel: { formatter: (value) => String(value).slice(2) },
     },
     yAxis: {
@@ -273,14 +317,14 @@ const trendOption = computed(() => {
       {
         name: '签约金额',
         type: 'bar',
-        data: trend.signed,
+        data: series.signed,
         barMaxWidth: 18,
         itemStyle: { color: '#2f6feb', borderRadius: [3, 3, 0, 0] },
       },
       {
-        name: '收款金额',
+        name: receivedName,
         type: 'line',
-        data: trend.received,
+        data: series.received,
         smooth: true,
         symbol: 'circle',
         symbolSize: 6,
@@ -305,7 +349,7 @@ const typeOption = computed(() => ({
       center: ['50%', '44%'],
       itemStyle: { borderColor: '#fff', borderWidth: 2, borderRadius: 4 },
       label: { show: true, formatter: '{b}\n{d}%' },
-      data: ledger.typeDistribution.value.map((item) => ({
+      data: typeRows.value.map((item) => ({
         name: item.name,
         value: item.amount,
         itemStyle: { color: item.color },
@@ -315,7 +359,7 @@ const typeOption = computed(() => ({
 }))
 
 const statusOption = computed(() => {
-  const list = ledger.statusDistribution.value
+  const list = statusRows.value
   return {
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     grid: { left: 8, right: 32, top: 16, bottom: 20, containLabel: true },
@@ -342,15 +386,15 @@ function go(path, query) {
 }
 
 function goCreate() {
-  go('/contracts', { action: 'create' })
+  go(contractsPath.value, { action: 'create' })
 }
 
 function jumpToContracts(quick) {
-  go('/contracts', { quick })
+  go(contractsPath.value, { quick })
 }
 
 function openContract(id) {
-  go('/contracts', { detail: id })
+  go(contractsPath.value, { detail: id })
 }
 
 async function ignoreReminder(key) {
@@ -377,7 +421,7 @@ async function exportNow() {
 
 async function loadDemo() {
   try {
-    await ElMessageBox.confirm('将用 15 条演示数据替换当前数据，建议先导出备份。', '载入演示数据', {
+    await ElMessageBox.confirm('将用演示数据替换当前数据，建议先导出备份。', '载入演示数据', {
       confirmButtonText: '载入',
       cancelButtonText: '取消',
       type: 'warning',

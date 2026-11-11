@@ -436,6 +436,25 @@
   margin-left: 0;
 }
 
+/* 窄屏卡片：资金进度与交付进度纵向堆叠，375px 无横向溢出 */
+.mobile-card-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.mobile-card-progress .progress-preview > .small:first-child {
+  min-width: 56px;
+  flex: 0 0 auto;
+}
+
+.mobile-card-progress .progress-preview > .small:last-child {
+  min-width: 42px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .mobile-empty {
   padding: 12px 0;
 }

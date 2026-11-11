@@ -1,5 +1,5 @@
 import dayjs from 'dayjs'
-import { STATUS_CODES } from '../data/schema'
+import { STATUS_CODES, normalizeDirection } from '../data/schema'
 import { isFiniteNumber, roundMoney, toNumber } from './format'
 
 /**
@@ -7,9 +7,12 @@ import { isFiniteNumber, roundMoney, toNumber } from './format'
  * @property {string} id
  * @property {string} no
  * @property {string} customer
+ * @property {'sale'|'purchase'} [direction]
  * @property {string} typeCode
  * @property {number} amount
  * @property {number} receivedAmount
+ * @property {number} [deliveredAmount]
+ * @property {string} [lastDeliveryDate]
  * @property {string} [paymentDate]
  * @property {string} signDate
  * @property {string} [startDate]
@@ -35,17 +38,58 @@ export function unpaidAmount(contract) {
 }
 
 /**
- * 收款进度（0~100），合同金额 ≤ 0 时返回 null，调用方显示「—」。
+ * 资金进度（0~100）：已收/已付金额占合同金额的比例，合同金额 ≤ 0 时返回 null，调用方显示「—」。
  * @param {Contract} contract
  * @returns {number|null}
  */
-export function paymentPercent(contract) {
+export function fundingPercent(contract) {
   const amount = toNumber(contract?.amount, 0)
   const received = toNumber(contract?.receivedAmount, 0)
   if (!isFiniteNumber(amount) || amount <= 0) return null
   const percent = (received / amount) * 100
   if (!Number.isFinite(percent)) return null
   return Math.min(100, Math.max(0, roundMoney(percent, 2)))
+}
+
+/**
+ * 交付进度（0~100）：已交付金额占合同金额的比例，合同金额 ≤ 0 时返回 null。
+ * @param {Contract} contract
+ * @returns {number|null}
+ */
+export function deliveryPercent(contract) {
+  const amount = toNumber(contract?.amount, 0)
+  const delivered = toNumber(contract?.deliveredAmount, 0)
+  if (!isFiniteNumber(amount) || amount <= 0) return null
+  const percent = (delivered / amount) * 100
+  if (!Number.isFinite(percent)) return null
+  return Math.min(100, Math.max(0, roundMoney(percent, 2)))
+}
+
+/**
+ * 错位差额 = 已收/已付金额 − 已交付金额（正数表示资金先行，负数表示交付先行）。
+ * @param {Contract} contract
+ * @returns {number}
+ */
+export function executionGap(contract) {
+  const received = toNumber(contract?.receivedAmount, 0)
+  const delivered = toNumber(contract?.deliveredAmount, 0)
+  return roundMoney(received - delivered, 2)
+}
+
+/**
+ * 错位状态：none（无金额或均未发生）/ balanced（无差额）/ prepaid（资金先行）/ receivable（交付先行）。
+ * 调用方按方向把 prepaid 映射为预收/预付、receivable 映射为已交付未收款/已到货未付款。
+ * @param {Contract} contract
+ * @returns {'none'|'balanced'|'prepaid'|'receivable'}
+ */
+export function gapState(contract) {
+  const amount = toNumber(contract?.amount, 0)
+  const received = toNumber(contract?.receivedAmount, 0)
+  const delivered = toNumber(contract?.deliveredAmount, 0)
+  if (amount <= 0 || (received === 0 && delivered === 0)) return 'none'
+  const gap = roundMoney(received - delivered, 2)
+  if (gap === 0) return 'balanced'
+  return gap > 0 ? 'prepaid' : 'receivable'
 }
 
 /**
@@ -143,6 +187,50 @@ export function isOverdueUnpaid(contract, overdueDays = 0, dicts = [], today = d
 }
 
 /**
+ * 超期未交付：合同金额大于 0、未完结、已过到期日且交付进度未达 100%。
+ * @param {Contract} contract
+ * @param {Array<Object>} [dicts]
+ * @param {import('dayjs').Dayjs} [today]
+ * @returns {boolean}
+ */
+export function isOverdueDelivery(contract, dicts = [], today = dayjs()) {
+  if (toNumber(contract?.amount, 0) <= 0) return false
+  if (isClosedStatus(contract?.statusCode, dicts)) return false
+  const percent = deliveryPercent(contract)
+  if (percent === null || percent >= 100) return false
+  const diff = daysFromToday(contract?.dueDate, today)
+  return diff !== null && diff < 0
+}
+
+/**
+ * 已交付未收/付款：仍有未收/未付金额、已交付金额大于 0，且距最后交付日超过逾期判定天数。
+ * @param {Contract} contract
+ * @param {number} overdueDays
+ * @param {Array<Object>} [dicts]
+ * @param {import('dayjs').Dayjs} [today]
+ * @returns {boolean}
+ */
+export function isDeliveredUnpaid(contract, overdueDays = 0, dicts = [], today = dayjs()) {
+  if (unpaidAmount(contract) <= 0) return false
+  if (toNumber(contract?.deliveredAmount, 0) <= 0) return false
+  if (isClosedStatus(contract?.statusCode, dicts)) return false
+  const diff = daysFromToday(contract?.lastDeliveryDate, today)
+  if (diff === null) return false
+  return diff < -toNumber(overdueDays, 0)
+}
+
+/**
+ * 预收/预付未交付：已收/已付金额大于已交付金额，且合同未完结。
+ * @param {Contract} contract
+ * @param {Array<Object>} [dicts]
+ * @returns {boolean}
+ */
+export function isPrepaidUndelivered(contract, dicts = []) {
+  if (isClosedStatus(contract?.statusCode, dicts)) return false
+  return toNumber(contract?.receivedAmount, 0) > toNumber(contract?.deliveredAmount, 0)
+}
+
+/**
  * 数据质量异常：日期缺失 / 日期先后颠倒 / 金额非法 / 已收超合同金额。
  * @param {Contract} contract
  * @returns {string[]} 异常原因列表
@@ -200,6 +288,8 @@ export const QUICK_FILTERS = [
   { value: 'invalid', label: '数据质量异常', description: '日期逻辑或金额字段异常' },
   { value: 'unpaid', label: '有未收金额', description: '未收金额大于 0' },
   { value: 'received', label: '已产生收款', description: '已收金额大于 0' },
+  { value: 'deliveredUnfunded', label: '已交付未收款', description: '已交付金额大于 0 且仍有未收金额' },
+  { value: 'fundedUndelivered', label: '已收款未交付', description: '已收金额大于已交付金额（资金先行）' },
   { value: 'executing', label: '执行中', description: '状态为执行中' },
   { value: 'finished', label: '已完结', description: '状态为已完结' },
   { value: 'monthSigned', label: '本月新签', description: '签订日期在本月' },
@@ -240,6 +330,17 @@ export function matchesQuick(contract, quick, settings = {}, dicts = [], today =
       return unpaidAmount(contract) > 0
     case 'received':
       return toNumber(contract.receivedAmount, 0) > 0
+    case 'deliveredUnfunded':
+      return toNumber(contract.deliveredAmount, 0) > 0 && unpaidAmount(contract) > 0
+    case 'fundedUndelivered':
+      return (
+        toNumber(contract.receivedAmount, 0) > 0 &&
+        toNumber(contract.receivedAmount, 0) > toNumber(contract.deliveredAmount, 0)
+      )
+    case 'overdueDelivery':
+      return isOverdueDelivery(contract, dicts, today)
+    case 'prepaidUndelivered':
+      return isPrepaidUndelivered(contract, dicts)
     case 'executing':
       return contract.statusCode === STATUS_CODES.EXECUTING
     case 'finished':
@@ -298,6 +399,27 @@ export const REMINDER_GROUPS = [
     quick: 'invalid',
     description: '到期日缺失或日期/金额逻辑异常',
   },
+  {
+    key: 'overdueDelivery',
+    title: '超期未交付',
+    type: 'error',
+    quick: 'overdueDelivery',
+    description: '已过到期日且交付进度未达 100%',
+  },
+  {
+    key: 'deliveredUnpaid',
+    title: '已交付未收/付款',
+    type: 'warning',
+    quick: 'deliveredUnfunded',
+    description: '存在未收/未付金额且已交付金额大于 0，超过逾期判定天数未收到资金',
+  },
+  {
+    key: 'prepaidUndelivered',
+    title: '预收款/预付款未交付',
+    type: 'info',
+    quick: 'fundedUndelivered',
+    description: '已收/已付金额大于已交付金额且合同未完结',
+  },
 ]
 
 /**
@@ -308,12 +430,21 @@ export const REMINDER_GROUPS = [
  * @param {Array<Object>} payload.dicts
  * @param {string[]} [payload.ignored]
  * @param {import('dayjs').Dayjs} [payload.today]
+ * @param {'sale'|'purchase'} [payload.direction] 传入时只统计该方向合同
  * @returns {Array<Object>}
  */
-export function computeReminders({ contracts = [], settings = {}, dicts = [], ignored = [], today = dayjs() }) {
+export function computeReminders({
+  contracts = [],
+  settings = {},
+  dicts = [],
+  ignored = [],
+  today = dayjs(),
+  direction = '',
+}) {
   const ignoredSet = new Set(ignored || [])
+  const scoped = direction ? contracts.filter((c) => normalizeDirection(c.direction) === direction) : contracts
   return REMINDER_GROUPS.map((group) => {
-    const matched = contracts.filter((c) => matchesQuick(c, group.quick, settings, dicts, today))
+    const matched = scoped.filter((c) => matchesQuick(c, group.quick, settings, dicts, today))
     const visible = matched.filter((c) => !ignoredSet.has(`${group.key}:${c.id}`))
     return {
       ...group,
@@ -337,31 +468,54 @@ export function computeReminders({ contracts = [], settings = {}, dicts = [], ig
 
 /**
  * 首页统计（全部为实时计算，不落库）。
+ * 传入 direction 时只统计该方向合同；收款条数同样只统计该方向合同产生的流水。
  * @param {Object} payload
  * @param {Contract[]} payload.contracts
  * @param {Array<Object>} payload.payments
  * @param {Object} payload.settings
  * @param {Array<Object>} payload.dicts
  * @param {import('dayjs').Dayjs} [payload.today]
+ * @param {'sale'|'purchase'} [payload.direction]
  * @returns {Object}
  */
-export function computeStats({ contracts = [], payments = [], settings = {}, dicts = [], today = dayjs() }) {
-  const totalAmount = contracts.reduce((sum, c) => sum + toNumber(c.amount, 0), 0)
-  const receivedAmount = contracts.reduce((sum, c) => sum + toNumber(c.receivedAmount, 0), 0)
-  const unpaidTotal = contracts.reduce((sum, c) => sum + unpaidAmount(c), 0)
-  const executing = contracts.filter((c) => c.statusCode === STATUS_CODES.EXECUTING)
-  const monthSigned = contracts.filter((c) => c.signDate && dayjs(c.signDate).isSame(today, 'month'))
-  const dueSoon = contracts.filter((c) => isDueSoon(c, settings.reminderDays, dicts, today))
-  const overdue = contracts.filter((c) => isOverdue(c, dicts, today))
-  const overdueUnpaidList = contracts.filter((c) => isOverdueUnpaid(c, settings.overdueDays, dicts, today))
+export function computeStats({
+  contracts = [],
+  payments = [],
+  settings = {},
+  dicts = [],
+  today = dayjs(),
+  direction = '',
+}) {
+  const scopedContracts = direction
+    ? contracts.filter((c) => normalizeDirection(c.direction) === direction)
+    : contracts
+  const scopedPayments = direction
+    ? payments.filter((p) => {
+        const contract = contracts.find((c) => c.id === p.contractId)
+        return contract ? normalizeDirection(contract.direction) === direction : false
+      })
+    : payments
+  const totalAmount = scopedContracts.reduce((sum, c) => sum + toNumber(c.amount, 0), 0)
+  const receivedAmount = scopedContracts.reduce((sum, c) => sum + toNumber(c.receivedAmount, 0), 0)
+  const deliveredAmount = scopedContracts.reduce((sum, c) => sum + toNumber(c.deliveredAmount, 0), 0)
+  const unpaidTotal = scopedContracts.reduce((sum, c) => sum + unpaidAmount(c), 0)
+  const executing = scopedContracts.filter((c) => c.statusCode === STATUS_CODES.EXECUTING)
+  const monthSigned = scopedContracts.filter((c) => c.signDate && dayjs(c.signDate).isSame(today, 'month'))
+  const dueSoon = scopedContracts.filter((c) => isDueSoon(c, settings.reminderDays, dicts, today))
+  const overdue = scopedContracts.filter((c) => isOverdue(c, dicts, today))
+  const overdueUnpaidList = scopedContracts.filter((c) => isOverdueUnpaid(c, settings.overdueDays, dicts, today))
   const paymentRate = totalAmount > 0 ? (receivedAmount / totalAmount) * 100 : null
+  const deliveryRate = totalAmount > 0 ? (deliveredAmount / totalAmount) * 100 : null
 
   return {
-    contractCount: contracts.length,
+    direction: direction || 'all',
+    contractCount: scopedContracts.length,
     totalAmount: roundMoney(totalAmount, 2),
     receivedAmount: roundMoney(receivedAmount, 2),
+    deliveredAmount: roundMoney(deliveredAmount, 2),
     unpaidAmount: roundMoney(unpaidTotal, 2),
     paymentRate: paymentRate === null ? null : roundMoney(Math.min(100, Math.max(0, paymentRate)), 2),
+    deliveryRate: deliveryRate === null ? null : roundMoney(Math.min(100, Math.max(0, deliveryRate)), 2),
     executingCount: executing.length,
     monthSignedCount: monthSigned.length,
     monthSignedAmount: roundMoney(
@@ -374,7 +528,7 @@ export function computeStats({ contracts = [], payments = [], settings = {}, dic
       overdueUnpaidList.reduce((sum, c) => sum + unpaidAmount(c), 0),
       2,
     ),
-    paymentCount: payments.length,
+    paymentCount: scopedPayments.length,
   }
 }
 
@@ -385,9 +539,20 @@ export function computeStats({ contracts = [], payments = [], settings = {}, dic
  * @param {Array<Object>} payload.payments
  * @param {number} [payload.months]
  * @param {import('dayjs').Dayjs} [payload.today]
+ * @param {'sale'|'purchase'} [payload.direction] 传入时只统计该方向的合同与对应流水
  * @returns {{labels:string[], signed:number[], received:number[]}}
  */
-export function monthlyTrend({ contracts = [], payments = [], months = 12, today = dayjs() }) {
+export function monthlyTrend({ contracts = [], payments = [], months = 12, today = dayjs(), direction = '' }) {
+  const contractMap = new Map(contracts.map((c) => [c.id, c]))
+  const scopedContracts = direction
+    ? contracts.filter((c) => normalizeDirection(c.direction) === direction)
+    : contracts
+  const scopedPayments = direction
+    ? payments.filter((p) => {
+        const contract = contractMap.get(p.contractId)
+        return contract ? normalizeDirection(contract.direction) === direction : false
+      })
+    : payments
   const labels = []
   const keys = []
   for (let i = months - 1; i >= 0; i -= 1) {
@@ -397,7 +562,7 @@ export function monthlyTrend({ contracts = [], payments = [], months = 12, today
   }
   const signed = keys.map((key) =>
     roundMoney(
-      contracts
+      scopedContracts
         .filter((c) => c.signDate && dayjs(c.signDate).format('YYYY-MM') === key)
         .reduce((sum, c) => sum + toNumber(c.amount, 0), 0),
       2,
@@ -405,7 +570,7 @@ export function monthlyTrend({ contracts = [], payments = [], months = 12, today
   )
   const received = keys.map((key) =>
     roundMoney(
-      payments
+      scopedPayments
         .filter((p) => p.date && dayjs(p.date).format('YYYY-MM') === key)
         .reduce((sum, p) => sum + toNumber(p.amount, 0), 0),
       2,
@@ -419,12 +584,14 @@ export function monthlyTrend({ contracts = [], payments = [], months = 12, today
  * @param {Contract[]} contracts
  * @param {'typeCode'|'statusCode'} field
  * @param {Array<Object>} dicts
+ * @param {'sale'|'purchase'} [direction] 传入时只统计该方向合同
  * @returns {Array<{code:string,name:string,color:string,count:number,amount:number}>}
  */
-export function groupByDict(contracts, field, dicts) {
+export function groupByDict(contracts, field, dicts, direction = '') {
+  const list = direction ? contracts.filter((c) => normalizeDirection(c.direction) === direction) : contracts
   /** @type {Map<string, {code:string,name:string,color:string,count:number,amount:number}>} */
   const map = new Map()
-  for (const c of contracts) {
+  for (const c of list) {
     const code = c[field] || 'unknown'
     if (!map.has(code)) {
       const dict = dicts.find((d) => d.category === (field === 'typeCode' ? 'contractType' : 'contractStatus') && d.code === code)

@@ -20,7 +20,7 @@
       </template>
     </el-table-column>
 
-    <el-table-column v-if="show('customer')" prop="customer" label="客户名称" min-width="190" show-overflow-tooltip>
+    <el-table-column v-if="show('customer')" prop="customer" :label="labelOf('customer')" min-width="190" show-overflow-tooltip>
       <template #default="{ row }">
         <span>{{ row.customer }}</span>
       </template>
@@ -48,7 +48,7 @@
     <el-table-column
       v-if="show('receivedAmount')"
       prop="receivedAmount"
-      label="已收金额"
+      :label="labelOf('receivedAmount')"
       width="140"
       align="right"
       sortable="custom"
@@ -58,7 +58,7 @@
       </template>
     </el-table-column>
 
-    <el-table-column v-if="show('unpaid')" prop="unpaid" label="未收金额" width="140" align="right" sortable="custom">
+    <el-table-column v-if="show('unpaid')" prop="unpaid" :label="labelOf('unpaid')" width="140" align="right" sortable="custom">
       <template #default="{ row }">
         <span class="money-cell" :class="{ 'is-unpaid': row.unpaid > 0 }">
           {{ formatMoney(row.unpaid, precision) }}
@@ -66,22 +66,43 @@
       </template>
     </el-table-column>
 
-    <el-table-column v-if="show('progress')" prop="percent" label="收款进度" width="180" sortable="custom">
+    <el-table-column v-if="show('progress')" prop="percent" :label="labelOf('progress')" width="180" sortable="custom">
       <template #default="{ row }">
         <div class="cell-progress">
           <el-progress
-            v-if="row.percent !== null"
-            :percentage="row.percent"
+            v-if="row.fundingPercent !== null"
+            :percentage="row.fundingPercent"
             :show-text="false"
             :stroke-width="8"
-            :color="progressColor(row)"
+            :color="progressColor(row.fundingPercent)"
           />
-          <span class="cell-progress-text">{{ row.percent === null ? '—' : formatPercent(row.percent, 0) }}</span>
+          <span class="cell-progress-text">{{ row.fundingPercent === null ? '—' : formatPercent(row.fundingPercent, 0) }}</span>
         </div>
       </template>
     </el-table-column>
 
-    <el-table-column v-if="show('paymentDate')" prop="paymentDate" label="收款日期" width="122" sortable="custom">
+    <el-table-column
+      v-if="show('deliveryProgress')"
+      prop="deliveryProgress"
+      :label="labelOf('deliveryProgress')"
+      width="180"
+      sortable="custom"
+    >
+      <template #default="{ row }">
+        <div class="cell-progress">
+          <el-progress
+            v-if="row.deliveryPercent !== null"
+            :percentage="row.deliveryPercent"
+            :show-text="false"
+            :stroke-width="8"
+            :color="progressColor(row.deliveryPercent)"
+          />
+          <span class="cell-progress-text">{{ row.deliveryPercent === null ? '—' : formatPercent(row.deliveryPercent, 0) }}</span>
+        </div>
+      </template>
+    </el-table-column>
+
+    <el-table-column v-if="show('paymentDate')" prop="paymentDate" :label="labelOf('paymentDate')" width="122" sortable="custom">
       <template #default="{ row }">{{ formatDate(row.paymentDate) }}</template>
     </el-table-column>
 
@@ -141,7 +162,7 @@
       </template>
     </el-table-column>
 
-    <el-table-column label="操作" width="216" fixed="right">
+    <el-table-column label="操作" width="252" fixed="right">
       <template #default="{ row }">
         <div class="cell-actions">
           <el-tooltip content="查看详情" placement="top">
@@ -155,12 +176,27 @@
             </span>
           </el-tooltip>
           <el-tooltip
-            :content="!writable ? '仅可浏览与导出（当前为只读模式）' : row.unpaid > 0 ? '登记一笔收款' : '该合同没有未收金额'"
+            :content="!writable ? '仅可浏览与导出（当前为只读模式）' : row.unpaid > 0 ? `登记一笔${funding.verb}` : `该合同没有${funding.unpaid}`"
             placement="top"
           >
             <span>
               <el-button link type="success" :disabled="!writable || row.unpaid <= 0" @click="emit('payment', row)">
-                收款
+                {{ funding.verb }}
+              </el-button>
+            </span>
+          </el-tooltip>
+          <el-tooltip
+            :content="!writable ? '仅可浏览与导出（当前为只读模式）' : row.amount > 0 && row.deliveredAmount >= row.amount ? '该合同已全部交付' : '登记一笔交付'"
+            placement="top"
+          >
+            <span>
+              <el-button
+                link
+                type="warning"
+                :disabled="!writable || (row.amount > 0 && row.deliveredAmount >= row.amount)"
+                @click="emit('delivery', row)"
+              >
+                交付
               </el-button>
             </span>
           </el-tooltip>
@@ -187,7 +223,7 @@
       <el-empty description="暂无符合条件的合同" :image-size="90">
         <el-tooltip :disabled="writable" content="仅可浏览与导出（当前为只读模式）" placement="top">
           <span>
-            <el-button type="primary" :disabled="!writable" @click="emit('create')">新增合同</el-button>
+            <el-button type="primary" :disabled="!writable" @click="emit('create')">新增{{ directionName }}</el-button>
           </span>
         </el-tooltip>
       </el-empty>
@@ -196,11 +232,13 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { ArrowDown, UserFilled, View, Warning } from '@element-plus/icons-vue'
+import { useLedger } from '../composables/useLedger'
 import { formatDate, formatDateTime, formatMoney, formatPercent } from '../utils/format'
 
 const tableRef = ref(null)
+const ledger = useLedger()
 
 const props = defineProps({
   contracts: { type: Array, default: () => [] },
@@ -209,6 +247,7 @@ const props = defineProps({
   precision: { type: Number, default: 2 },
   defaultSort: { type: Object, default: () => ({}) },
   writable: { type: Boolean, default: true },
+  direction: { type: String, default: 'sale' },
 })
 
 const emit = defineEmits([
@@ -217,10 +256,26 @@ const emit = defineEmits([
   'copy',
   'delete',
   'payment',
+  'delivery',
   'create',
   'selection-change',
   'sort-change',
 ])
+
+/** 列标题按方向解析（来自 ledger.columnsFor，prop 不变仅 label 换义）。 */
+const columnLabels = computed(() => {
+  /** @type {Record<string, string>} */
+  const map = {}
+  for (const column of ledger.columnsFor(props.direction)) map[column.prop] = column.label
+  return map
+})
+
+const funding = computed(() => ledger.fundingLabels(props.direction))
+const directionName = computed(() => ledger.directionLabel(props.direction))
+
+function labelOf(prop) {
+  return columnLabels.value[prop] || prop
+}
 
 function show(prop) {
   return props.visible[prop] !== false
@@ -240,10 +295,11 @@ function tagStyle(color) {
   }
 }
 
-function progressColor(row) {
-  if (row.percent === null) return '#c0c4cc'
-  if (row.percent >= 100) return '#2f9e63'
-  if (row.percent >= 60) return '#409eff'
+/** 进度条颜色：按百分比取值，资金 / 交付两条进度共用。 */
+function progressColor(percent) {
+  if (percent === null || percent === undefined) return '#c0c4cc'
+  if (percent >= 100) return '#2f9e63'
+  if (percent >= 60) return '#409eff'
   return '#d9932f'
 }
 

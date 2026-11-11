@@ -33,7 +33,8 @@ export const ENGINE_LABELS = Object.freeze({
 })
 
 const DB_NAME = 'contract-ledger'
-const DB_VERSION = 1
+// 版本 2：新增 deliveries 对象仓库（需升级版本才会触发 onupgradeneeded 创建）
+const DB_VERSION = 2
 const LS_KEY = 'contract-ledger:dataset:v1'
 const LS_CORRUPT_KEY = 'contract-ledger:dataset:corrupt'
 
@@ -342,12 +343,13 @@ function normalizeWriteError(err) {
 
 /**
  * @param {Object} dataset
- * @returns {{contracts:number,payments:number,personnel:number,dicts:number}}
+ * @returns {{contracts:number,payments:number,deliveries:number,personnel:number,dicts:number}}
  */
 export function countsOf(dataset = data) {
   return {
     contracts: Array.isArray(dataset.contracts) ? dataset.contracts.length : 0,
     payments: Array.isArray(dataset.payments) ? dataset.payments.length : 0,
+    deliveries: Array.isArray(dataset.deliveries) ? dataset.deliveries.length : 0,
     personnel: Array.isArray(dataset.personnel) ? dataset.personnel.length : 0,
     dicts: Array.isArray(dataset.dicts) ? dataset.dicts.length : 0,
   }
@@ -363,6 +365,7 @@ export function cloneDataset(source) {
   return {
     contracts: deepClone(Array.isArray(base.contracts) ? base.contracts : []),
     payments: deepClone(Array.isArray(base.payments) ? base.payments : []),
+    deliveries: deepClone(Array.isArray(base.deliveries) ? base.deliveries : []),
     personnel: deepClone(Array.isArray(base.personnel) ? base.personnel : []),
     dicts: deepClone(Array.isArray(base.dicts) ? base.dicts : []),
     settings: deepClone(normalizeSettings(base.settings)),
@@ -653,7 +656,7 @@ export function mergeDatasets(base, incoming) {
   let added = 0
   let updated = 0
   let kept = 0
-  for (const name of ['contracts', 'payments', 'personnel', 'dicts']) {
+  for (const name of ['contracts', 'payments', 'deliveries', 'personnel', 'dicts']) {
     const map = new Map((out[name] || []).map((record) => [record.id, record]))
     for (const record of incoming[name] || []) {
       const previous = map.get(record.id)

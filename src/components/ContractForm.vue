@@ -19,7 +19,7 @@
         </span>
       </el-tooltip>
       <div class="toolbar-spacer" />
-      <span class="small muted">未收金额与收款进度为派生字段（只读），随金额实时计算</span>
+      <span class="small muted">{{ funding.unpaid }}与{{ funding.progress }}为派生字段（只读），随金额实时计算；已交付金额由「登记交付」维护</span>
     </div>
 
     <el-form
@@ -43,11 +43,11 @@
           </el-form-item>
         </el-col>
         <el-col :xs="24" :sm="12">
-          <el-form-item label="客户名称" prop="customer">
+          <el-form-item :label="`${party}名称`" prop="customer">
             <el-autocomplete
               v-model="form.customer"
               :fetch-suggestions="queryCustomers"
-              placeholder="输入客户名称，可联想历史客户"
+              :placeholder="`输入${party}名称，可联想历史${party}`"
               clearable
               maxlength="80"
               style="width: 100%"
@@ -91,6 +91,24 @@
           </el-form-item>
         </el-col>
 
+        <el-col :span="24">
+          <el-form-item label="合同方向" prop="direction">
+            <el-tooltip
+              :disabled="!directionLocked"
+              content="该合同已有收款流水或交付明细，方向不可更改；如需更改请先删除全部执行记录"
+              placement="top"
+            >
+              <span>
+                <el-radio-group v-model="form.direction" :disabled="directionLocked">
+                  <el-radio value="sale">销售合同</el-radio>
+                  <el-radio value="purchase">采购合同</el-radio>
+                </el-radio-group>
+              </span>
+            </el-tooltip>
+            <span v-if="directionLocked" class="small muted" style="margin-left: 10px">已有执行记录，方向已锁定</span>
+          </el-form-item>
+        </el-col>
+
         <el-col :xs="24" :sm="12">
           <el-form-item label="合同金额" prop="amount">
             <el-input-number
@@ -106,7 +124,7 @@
           </el-form-item>
         </el-col>
         <el-col :xs="24" :sm="12">
-          <el-form-item label="已收金额" prop="receivedAmount">
+          <el-form-item :label="funding.received" prop="receivedAmount">
             <el-input-number
               v-model="form.receivedAmount"
               :min="0"
@@ -117,40 +135,63 @@
               placeholder="0.00"
               style="width: 100%"
             />
-            <div class="derived-hint">也可在列表中使用「登记收款」自动累加</div>
+            <div class="derived-hint">也可在列表中使用「登记{{ funding.verb }}」自动累加</div>
           </el-form-item>
         </el-col>
 
         <el-col :xs="24" :sm="12">
-          <el-form-item label="未收金额">
+          <el-form-item :label="funding.unpaid">
             <el-input :model-value="formatMoney(unpaid, precision)" disabled class="readonly-field" />
           </el-form-item>
         </el-col>
         <el-col :xs="24" :sm="12">
-          <el-form-item label="收款进度">
+          <el-form-item :label="funding.progress">
             <div class="progress-preview">
               <el-progress
-                v-if="percent !== null"
-                :percentage="percent"
+                v-if="fundingPct !== null"
+                :percentage="fundingPct"
                 :stroke-width="12"
-                :color="progressColor"
+                :color="fundingColor"
                 :show-text="false"
               />
-              <span class="small" :class="{ muted: percent === null }">
-                {{ percent === null ? '—（合同金额为 0）' : formatPercent(percent, 1) }}
+              <span class="small" :class="{ muted: fundingPct === null }">
+                {{ fundingPct === null ? '—（合同金额为 0）' : formatPercent(fundingPct, 1) }}
               </span>
             </div>
           </el-form-item>
         </el-col>
 
         <el-col :xs="24" :sm="12">
-          <el-form-item label="收款日期">
+          <el-form-item label="已交付金额">
+            <el-input :model-value="formatMoney(delivered, precision)" disabled class="readonly-field" />
+            <div class="derived-hint">只能由「登记交付」维护，不可手改</div>
+          </el-form-item>
+        </el-col>
+        <el-col :xs="24" :sm="12">
+          <el-form-item label="交付进度">
+            <div class="progress-preview">
+              <el-progress
+                v-if="deliveryPct !== null"
+                :percentage="deliveryPct"
+                :stroke-width="12"
+                :color="deliveryColor"
+                :show-text="false"
+              />
+              <span class="small" :class="{ muted: deliveryPct === null }">
+                {{ deliveryPct === null ? '—（合同金额为 0）' : formatPercent(deliveryPct, 1) }}
+              </span>
+            </div>
+          </el-form-item>
+        </el-col>
+
+        <el-col :xs="24" :sm="12">
+          <el-form-item :label="funding.date">
             <el-date-picker
               v-model="form.paymentDate"
               type="date"
               value-format="YYYY-MM-DD"
               format="YYYY-MM-DD"
-              placeholder="最近一次收款日期"
+              :placeholder="`最近一次${funding.verb}日期`"
               style="width: 100%"
             />
           </el-form-item>
@@ -345,6 +386,7 @@ import { useMediaQuery } from '../composables/useMediaQuery'
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   contract: { type: Object, default: null },
+  direction: { type: String, default: 'sale' },
 })
 
 const emit = defineEmits(['update:modelValue', 'saved'])
@@ -367,7 +409,21 @@ const visible = computed({
 })
 
 const isEdit = computed(() => Boolean(props.contract && props.contract.id))
-const dialogTitle = computed(() => (isEdit.value ? `编辑合同 · ${props.contract.no}` : '新增合同'))
+const dialogTitle = computed(() =>
+  isEdit.value ? `编辑合同 · ${props.contract.no}` : `新增${ledger.directionLabel(props.direction)}`,
+)
+/** 表单当前方向（新建取入口方向，编辑取合同方向并可实时切换标签）。 */
+const currentDirection = computed(() => (form.direction === 'purchase' ? 'purchase' : 'sale'))
+const party = computed(() => ledger.partyLabel(currentDirection.value))
+const funding = computed(() => ledger.fundingLabels(currentDirection.value))
+/** 已有资金流水或交付明细的合同锁定方向（真正拦截在领域层，UI 只置灰）。 */
+const directionLocked = computed(() => {
+  if (!isEdit.value) return false
+  const id = props.contract.id
+  const hasPayments = ledger.data.payments.some((item) => item.contractId === id)
+  const hasDeliveries = (ledger.data.deliveries || []).some((item) => item.contractId === id)
+  return hasPayments || hasDeliveries
+})
 const dialogWidth = computed(() => (isNarrow.value ? '96%' : '900px'))
 const labelWidth = computed(() => (isNarrow.value ? '100px' : '110px'))
 const labelPosition = computed(() => (isNarrow.value ? 'top' : 'right'))
@@ -378,10 +434,13 @@ function blankContract() {
     id: '',
     no: '',
     customer: '',
+    direction: props.direction === 'purchase' ? 'purchase' : 'sale',
     typeCode: '',
     amount: 0,
     receivedAmount: 0,
     paymentDate: '',
+    deliveredAmount: 0,
+    lastDeliveryDate: '',
     signDate: today,
     startDate: today,
     dueDate: '',
@@ -413,20 +472,29 @@ const unpaid = computed(() => {
   return Math.max(0, amount - received)
 })
 
-const percent = computed(() => {
+const delivered = computed(() => toNumber(form.deliveredAmount, 0))
+
+/** 两条进度按表单实时值计算（与派生层同口径：金额 ≤ 0 返回 null 显示「—」）。 */
+function percentOf(numerator) {
   const amount = toNumber(form.amount, 0)
   if (amount <= 0) return null
-  const value = (toNumber(form.receivedAmount, 0) / amount) * 100
+  const value = (toNumber(numerator, 0) / amount) * 100
   if (!Number.isFinite(value)) return null
   return Math.min(100, Math.max(0, Math.round(value * 100) / 100))
-})
+}
 
-const progressColor = computed(() => {
-  if (percent.value === null) return '#c0c4cc'
-  if (percent.value >= 100) return '#2f9e63'
-  if (percent.value >= 60) return '#409eff'
+const fundingPct = computed(() => percentOf(form.receivedAmount))
+const deliveryPct = computed(() => percentOf(delivered.value))
+
+function colorFor(pct) {
+  if (pct === null) return '#c0c4cc'
+  if (pct >= 100) return '#2f9e63'
+  if (pct >= 60) return '#409eff'
   return '#d9932f'
-})
+}
+
+const fundingColor = computed(() => colorFor(fundingPct.value))
+const deliveryColor = computed(() => colorFor(deliveryPct.value))
 
 const typeOptions = computed(() => {
   const list = ledger.dictsByCategory.value.contractType || []
@@ -479,8 +547,13 @@ function serialize() {
 function load() {
   const source = props.contract || {}
   Object.assign(form, blankContract(), source)
+  form.direction = source.direction === 'purchase' || (!source.id && props.direction === 'purchase')
+    ? 'purchase'
+    : 'sale'
   form.amount = toNumber(source.amount, 0)
   form.receivedAmount = toNumber(source.receivedAmount, 0)
+  form.deliveredAmount = toNumber(source.deliveredAmount, 0)
+  form.lastDeliveryDate = source.lastDeliveryDate || ''
   form.note = source.note || ''
   form.attachments = Array.isArray(source.attachments)
     ? source.attachments.map((item) => ({ ...item, note: item.note || '' }))
@@ -527,6 +600,7 @@ watch(
 const FIELD_LABELS = {
   no: '合同编号',
   customer: '客户名称',
+  direction: '合同方向',
   typeCode: '合同类型',
   amount: '合同金额',
   receivedAmount: '已收金额',
@@ -556,6 +630,9 @@ async function submit() {
       ...form,
       attachments: form.attachments.map((item) => ({ ...item })),
     }
+    // 已交付金额与最后交付日期只能由交付明细维护，提交载荷中一律剔除
+    delete payload.deliveredAmount
+    delete payload.lastDeliveryDate
     const result = await ledger.actions.saveContract(payload)
     if (!result.ok) {
       ElMessage.error(result.message || '保存失败')

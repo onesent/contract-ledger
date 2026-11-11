@@ -14,7 +14,7 @@
 
     <el-alert type="info" :closable="false" show-icon title="导出 JSON 才是真正的存档">
       浏览器内数据只当本机缓存：清除站点数据、换浏览器、无痕模式、便携模式移动文件路径都可能导致丢失。
-      备份包含合同、收款流水、人员、字典与设置，并强制剔除 API Key / Base URL 等密钥字段。
+      备份包含合同、收款流水、交付明细、人员、字典与设置，并强制剔除 API Key / Base URL 等密钥字段。
     </el-alert>
 
     <div class="section-actions" style="margin-top: 14px">
@@ -74,9 +74,10 @@
       <el-descriptions :column="2" border size="small">
         <el-descriptions-item label="合同">{{ counts.contracts }} 份</el-descriptions-item>
         <el-descriptions-item label="收款流水">{{ counts.payments }} 条</el-descriptions-item>
+        <el-descriptions-item label="交付明细">{{ counts.deliveries }} 条</el-descriptions-item>
         <el-descriptions-item label="人员">{{ counts.personnel }} 名</el-descriptions-item>
         <el-descriptions-item label="字典项">{{ counts.dicts }} 项</el-descriptions-item>
-        <el-descriptions-item label="设置" :span="2">1 组（含字典分类、提醒参数、列显隐；AI 密钥已剔除）</el-descriptions-item>
+        <el-descriptions-item label="设置">1 组（含字典分类、提醒参数、列显隐；AI 密钥已剔除）</el-descriptions-item>
       </el-descriptions>
       <el-alert
         type="info"
@@ -132,6 +133,7 @@ const meta = ledger.meta
 const counts = computed(() => ({
   contracts: ledger.data.contracts.length,
   payments: ledger.data.payments.length,
+  deliveries: (ledger.data.deliveries || []).length,
   personnel: ledger.data.personnel.length,
   dicts: ledger.data.dicts.length,
 }))

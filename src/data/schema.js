@@ -2,13 +2,90 @@ import dayjs from 'dayjs'
 import { uuid } from '../utils/id'
 
 /** 当前数据结构版本，变更时编写幂等迁移函数。 */
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 /** 应用标识（备份文件与校验共用）。 */
 export const APP_ID = 'contract-ledger'
 
-/** 全部数据集合。 */
-export const COLLECTIONS = ['contracts', 'payments', 'personnel', 'dicts', 'settings', 'meta']
+/** 全部数据集合（存储层按此列表读写，新增集合必须同步）。 */
+export const COLLECTIONS = [
+  'contracts',
+  'payments',
+  'deliveries',
+  'personnel',
+  'dicts',
+  'settings',
+  'meta',
+]
+
+/**
+ * 合同方向（唯一的方向真相，由字段而非字典表达）。
+ * @type {{SALE:string, PURCHASE:string}}
+ */
+export const CONTRACT_DIRECTIONS = Object.freeze({
+  SALE: 'sale',
+  PURCHASE: 'purchase',
+})
+
+/** 方向名称。 */
+export const DIRECTION_LABELS = Object.freeze({
+  [CONTRACT_DIRECTIONS.SALE]: '销售合同',
+  [CONTRACT_DIRECTIONS.PURCHASE]: '采购合同',
+})
+
+/** 合同对方称谓。 */
+export const PARTY_LABELS = Object.freeze({
+  [CONTRACT_DIRECTIONS.SALE]: '客户',
+  [CONTRACT_DIRECTIONS.PURCHASE]: '供应商',
+})
+
+/**
+ * 资金轴文案（按方向取义）。
+ * @type {Object<string, {received:string, unpaid:string, progress:string, date:string, verb:string}>}
+ */
+export const FUNDING_LABELS = Object.freeze({
+  [CONTRACT_DIRECTIONS.SALE]: {
+    received: '已收金额',
+    unpaid: '未收金额',
+    progress: '收款进度',
+    date: '收款日期',
+    verb: '收款',
+  },
+  [CONTRACT_DIRECTIONS.PURCHASE]: {
+    received: '已付金额',
+    unpaid: '未付金额',
+    progress: '付款进度',
+    date: '付款日期',
+    verb: '付款',
+  },
+})
+
+/**
+ * 交付验收状态枚举。
+ * 这是驱动交付进度计算的固定枚举（rejected 不计入已交付金额），
+ * 不是用户可编辑的字典分类，因此不在 dicts 中新增分类。
+ */
+export const DELIVERY_STATUS = Object.freeze({
+  DELIVERED: 'delivered',
+  ACCEPTED: 'accepted',
+  REJECTED: 'rejected',
+})
+
+/** 交付验收状态的展示元信息（名称 / el-tag type / 色值）。 */
+export const DELIVERY_STATUS_META = Object.freeze({
+  [DELIVERY_STATUS.DELIVERED]: { name: '已交付', type: 'primary', color: '#409EFF' },
+  [DELIVERY_STATUS.ACCEPTED]: { name: '已验收', type: 'success', color: '#67C23A' },
+  [DELIVERY_STATUS.REJECTED]: { name: '验收驳回', type: 'danger', color: '#F56C6C' },
+})
+
+/**
+ * 规范化方向：非法 / 缺失值一律视为销售方向。
+ * @param {unknown} value
+ * @returns {'sale'|'purchase'}
+ */
+export function normalizeDirection(value) {
+  return value === CONTRACT_DIRECTIONS.PURCHASE ? CONTRACT_DIRECTIONS.PURCHASE : CONTRACT_DIRECTIONS.SALE
+}
 
 /** 内置合同状态编码（不可删除，可改名改色）。 */
 export const STATUS_CODES = Object.freeze({
@@ -64,7 +141,10 @@ export const DICT_CATEGORY_TEMPLATES = [
   },
 ]
 
-/** 合同表格列定义（列显隐默认值以此为准）。 */
+/**
+ * 合同表格列定义（销售方向默认值，列显隐默认为此为准）。
+ * `prop` 同时是 `settings.columnVisibility` 的键，任何方向下都不得改动。
+ */
 export const CONTRACT_COLUMNS = [
   { prop: 'no', label: '合同编号', width: 150, fixed: true },
   { prop: 'customer', label: '客户名称', minWidth: 180 },
@@ -73,6 +153,7 @@ export const CONTRACT_COLUMNS = [
   { prop: 'receivedAmount', label: '已收金额', width: 140, align: 'right' },
   { prop: 'unpaid', label: '未收金额', width: 140, align: 'right' },
   { prop: 'progress', label: '收款进度', width: 170 },
+  { prop: 'deliveryProgress', label: '交付进度', width: 170 },
   { prop: 'paymentDate', label: '收款日期', width: 120 },
   { prop: 'signDate', label: '签订日期', width: 120 },
   { prop: 'dueDate', label: '到期日', width: 120 },
@@ -83,6 +164,27 @@ export const CONTRACT_COLUMNS = [
   { prop: 'createdAt', label: '创建时间', width: 170 },
   { prop: 'updatedAt', label: '更新时间', width: 170 },
 ]
+
+/**
+ * 按方向生成列定义：只替换展示文案，prop / width / align / fixed 保持稳定，
+ * 因此旧列显隐设置无需迁移。
+ * @param {'sale'|'purchase'} [direction]
+ * @returns {Array<Object>}
+ */
+export function contractColumns(direction = CONTRACT_DIRECTIONS.SALE) {
+  const key = normalizeDirection(direction)
+  const funding = FUNDING_LABELS[key]
+  const labels = {
+    customer: key === CONTRACT_DIRECTIONS.PURCHASE ? '供应商名称' : '客户名称',
+    receivedAmount: funding.received,
+    unpaid: funding.unpaid,
+    progress: funding.progress,
+    paymentDate: funding.date,
+  }
+  return CONTRACT_COLUMNS.map((column) =>
+    labels[column.prop] ? { ...column, label: labels[column.prop] } : { ...column },
+  )
+}
 
 /**
  * 默认设置。
@@ -145,6 +247,7 @@ export function emptyDataset() {
   return {
     contracts: [],
     payments: [],
+    deliveries: [],
     personnel: [],
     dicts: [],
     settings: createSettings(),
@@ -192,6 +295,9 @@ export function normalizeMeta(value) {
   }
 }
 
+/** 迁移日志的动作标识（用于重复迁移去重，保证迁移幂等）。 */
+const MIGRATION_ACTION = 'migrateSchemaV2'
+
 /**
  * 为记录补齐 id / createdAt / updatedAt（迁移用，幂等）。
  * @param {Object} record
@@ -218,7 +324,9 @@ export function migrateDataset(dataset) {
   const next = emptyDataset()
   next.settings = normalizeSettings(source.settings)
   next.meta = normalizeMeta(source.meta)
-  for (const name of ['contracts', 'payments', 'personnel', 'dicts']) {
+  /** 迁移摘要计数（仅用于写一条 meta.opLogs，不参与业务计算）。 */
+  const summary = { contracts: 0, inferredPurchase: 0, dicts: 0 }
+  for (const name of ['contracts', 'payments', 'deliveries', 'personnel', 'dicts']) {
     const list = Array.isArray(source[name]) ? source[name] : []
     next[name] = list
       .filter((item) => item && typeof item === 'object')
@@ -229,11 +337,46 @@ export function migrateDataset(dataset) {
           record.statusLogs = Array.isArray(record.statusLogs) ? record.statusLogs : []
           record.amount = Number.isFinite(Number(record.amount)) ? Number(record.amount) : 0
           record.receivedAmount = Number.isFinite(Number(record.receivedAmount)) ? Number(record.receivedAmount) : 0
+          let touched = false
+          if (record.direction !== CONTRACT_DIRECTIONS.SALE && record.direction !== CONTRACT_DIRECTIONS.PURCHASE) {
+            // v1 数据没有方向字段：按旧「合同类型」推断，采购类型推断为采购，其余为销售
+            record.direction =
+              record.typeCode === 'purchase' ? CONTRACT_DIRECTIONS.PURCHASE : CONTRACT_DIRECTIONS.SALE
+            if (record.direction === CONTRACT_DIRECTIONS.PURCHASE) summary.inferredPurchase += 1
+            touched = true
+          }
+          if (!Number.isFinite(Number(record.deliveredAmount)) || Number(record.deliveredAmount) < 0) {
+            record.deliveredAmount = 0
+            touched = true
+          }
+          if (typeof record.lastDeliveryDate !== 'string') {
+            record.lastDeliveryDate = ''
+            touched = true
+          }
+          if (touched) summary.contracts += 1
+        }
+        if (name === 'deliveries') {
+          record.contractId = typeof record.contractId === 'string' ? record.contractId : ''
+          record.amount = Number.isFinite(Number(record.amount)) ? Number(record.amount) : 0
+          record.quantity = Number.isFinite(Number(record.quantity)) ? Number(record.quantity) : null
+          record.unit = typeof record.unit === 'string' ? record.unit : ''
+          record.note = typeof record.note === 'string' ? record.note : ''
+          record.date = typeof record.date === 'string' ? record.date : ''
+          if (!DELIVERY_STATUS_META[record.status]) record.status = DELIVERY_STATUS.DELIVERED
         }
         if (name === 'dicts') {
           record.enabled = record.enabled !== false
           record.sort = Number.isFinite(Number(record.sort)) ? Number(record.sort) : 0
           record.builtin = record.builtin === true
+          // 方向已由 contract 字段表达：停用（不删除）旧的「销售/采购」合同类型项，避免被引用计数拦截
+          if (
+            record.category === 'contractType' &&
+            (record.code === 'sales' || record.code === 'purchase') &&
+            record.enabled !== false
+          ) {
+            record.enabled = false
+            summary.dicts += 1
+          }
         }
         if (name === 'personnel') record.active = record.active !== false
         if (name === 'payments') record.amount = Number(record.amount) || 0
@@ -241,6 +384,21 @@ export function migrateDataset(dataset) {
       })
   }
   next.meta.schemaVersion = SCHEMA_VERSION
+  // 迁移摘要只写一次：已存在同名 action 的日志时不再追加，保证重复迁移输出完全一致
+  const hasMigrationLog =
+    Array.isArray(next.meta.opLogs) && next.meta.opLogs.some((log) => log && log.action === MIGRATION_ACTION)
+  const needsMigration =
+    summary.contracts > 0 || summary.inferredPurchase > 0 || summary.dicts > 0 || !Array.isArray(source.deliveries)
+  if (needsMigration && !hasMigrationLog) {
+    const log = {
+      id: uuid(),
+      action: MIGRATION_ACTION,
+      at: new Date().toISOString(),
+      by: '系统迁移',
+      detail: `数据结构升级到 v${SCHEMA_VERSION}：补齐 ${summary.contracts} 份合同的方向与交付字段（其中 ${summary.inferredPurchase} 份按合同类型推断为采购），停用 ${summary.dicts} 个方向字典项。`,
+    }
+    next.meta.opLogs = [...(next.meta.opLogs || []), log].slice(-200)
+  }
   return {
     dataset: next,
     fromVersion,
@@ -275,16 +433,18 @@ export function createDemoDataset() {
   for (const category of DICT_CATEGORY_TEMPLATES) {
     category.items.forEach((item, index) => {
       dictSeq += 1
+      // 方向已由合同字段表达：演示数据同样停用（不删除）旧的「销售/采购」合同类型项
+      const deprecated = category.code === 'contractType' && (item.code === 'sales' || item.code === 'purchase')
       dataset.dicts.push({
         id: dictId(dictSeq),
         category: category.code,
         code: item.code,
         name: item.name,
         sort: (index + 1) * 10,
-        enabled: true,
+        enabled: !deprecated,
         color: item.color,
         builtin: item.builtin === true,
-        note: '',
+        note: deprecated ? '方向已由合同方向字段表达，该项已停用' : '',
         createdAt: at(200),
         updatedAt: at(200),
       })
@@ -404,10 +564,13 @@ export function createDemoDataset() {
       id: input.id,
       no: input.no,
       customer: input.customer,
+      direction: input.direction || CONTRACT_DIRECTIONS.SALE,
       typeCode: input.typeCode,
       amount: input.amount,
       receivedAmount: input.receivedAmount,
       paymentDate: input.paymentDate || '',
+      deliveredAmount: input.deliveredAmount || 0,
+      lastDeliveryDate: input.lastDeliveryDate || '',
       signDate: input.signDate,
       startDate: input.startDate || input.signDate,
       dueDate: input.dueDate,
@@ -471,6 +634,8 @@ export function createDemoDataset() {
       amount: 360000,
       receivedAmount: 150000,
       paymentDate: ago(40),
+      deliveredAmount: 120000,
+      lastDeliveryDate: ago(30),
       signDate: ago(90),
       startDate: ago(90),
       dueDate: add(15),
@@ -750,6 +915,76 @@ export function createDemoDataset() {
       updatedAt: at(2),
       logs: [{ from: STATUS_CODES.DRAFT, to: STATUS_CODES.EXECUTING, at: at(5) }],
     }),
+    // ---- 采购方向演示合同（0 交付 / 部分交付 / 全部交付三档各一） ----
+    contract({
+      id: 'c0000000-0000-4000-8000-000000000016',
+      no: `HT-${now.format('YYYYMM')}-016`,
+      customer: '锐捷网络设备有限公司',
+      direction: CONTRACT_DIRECTIONS.PURCHASE,
+      typeCode: 'purchase',
+      amount: 600000,
+      receivedAmount: 0,
+      paymentDate: '',
+      deliveredAmount: 0,
+      lastDeliveryDate: '',
+      signDate: ago(60),
+      startDate: ago(60),
+      dueDate: add(45),
+      statusCode: STATUS_CODES.EXECUTING,
+      ownerId: p(5),
+      statusChangedAt: at(60),
+      note: '采购服务器设备，尚未到货、尚未付款，用于验证 0 交付进度。',
+      createdAt: at(60),
+      updatedAt: at(60),
+      logs: [{ from: STATUS_CODES.DRAFT, to: STATUS_CODES.EXECUTING, at: at(60) }],
+    }),
+    contract({
+      id: 'c0000000-0000-4000-8000-000000000017',
+      no: `HT-${now.format('YYYYMM')}-017`,
+      customer: '华美办公家具制造有限公司',
+      direction: CONTRACT_DIRECTIONS.PURCHASE,
+      typeCode: 'purchase',
+      amount: 300000,
+      receivedAmount: 180000,
+      paymentDate: ago(20),
+      deliveredAmount: 180000,
+      lastDeliveryDate: ago(5),
+      signDate: ago(80),
+      startDate: ago(80),
+      dueDate: add(20),
+      statusCode: STATUS_CODES.EXECUTING,
+      ownerId: p(3),
+      statusChangedAt: at(80),
+      note: '部分到货并部分付款，剩余 120000 元未交付，用于验证部分进度与验收驳回。',
+      createdAt: at(80),
+      updatedAt: at(5),
+      logs: [{ from: STATUS_CODES.DRAFT, to: STATUS_CODES.EXECUTING, at: at(80) }],
+    }),
+    contract({
+      id: 'c0000000-0000-4000-8000-000000000018',
+      no: `HT-${now.format('YYYYMM')}-018`,
+      customer: '新元新材料有限公司',
+      direction: CONTRACT_DIRECTIONS.PURCHASE,
+      typeCode: 'purchase',
+      amount: 500000,
+      receivedAmount: 500000,
+      paymentDate: ago(15),
+      deliveredAmount: 500000,
+      lastDeliveryDate: ago(20),
+      signDate: ago(120),
+      startDate: ago(120),
+      dueDate: ago(10),
+      statusCode: STATUS_CODES.FINISHED,
+      ownerId: p(4),
+      statusChangedAt: at(10),
+      note: '全部到货并验收，款项已付清，用于验证满进度与已完结。',
+      createdAt: at(120),
+      updatedAt: at(10),
+      logs: [
+        { from: STATUS_CODES.DRAFT, to: STATUS_CODES.EXECUTING, at: at(120) },
+        { from: STATUS_CODES.EXECUTING, to: STATUS_CODES.FINISHED, at: at(10) },
+      ],
+    }),
   ]
 
   // ---- 收款流水（金额与合同已收金额严格一致） ----
@@ -768,6 +1003,10 @@ export function createDemoDataset() {
     { contractId: 'c0000000-0000-4000-8000-000000000012', amount: 88000, date: ago(50), note: '全额回款' },
     { contractId: 'c0000000-0000-4000-8000-000000000013', amount: 1000000, date: ago(20), note: '预付款' },
     { contractId: 'c0000000-0000-4000-8000-000000000015', amount: 200000, date: ago(2), note: '首付款' },
+    // 采购合同的付款流水（已付金额与流水严格一致）
+    { contractId: 'c0000000-0000-4000-8000-000000000017', amount: 120000, date: ago(35), note: '到货付款' },
+    { contractId: 'c0000000-0000-4000-8000-000000000017', amount: 60000, date: ago(20), note: '验收付款' },
+    { contractId: 'c0000000-0000-4000-8000-000000000018', amount: 500000, date: ago(15), note: '一次性付清' },
   ]
   dataset.payments = payments.map((item, index) => ({
     id: payId(index + 1),
@@ -778,6 +1017,77 @@ export function createDemoDataset() {
     note: item.note,
     createdAt: iso(`${item.date}T03:00:00.000Z`),
     updatedAt: iso(`${item.date}T03:00:00.000Z`),
+  }))
+
+  // ---- 交付执行明细（delivered / accepted 计入已交付金额，rejected 不计入） ----
+  const deliveryId = (n) => `e0000000-0000-4000-8000-0000000000${String(n).padStart(2, '0')}`
+  const deliveries = [
+    {
+      contractId: 'c0000000-0000-4000-8000-000000000002',
+      amount: 120000,
+      date: ago(30),
+      quantity: null,
+      unit: '',
+      status: DELIVERY_STATUS.DELIVERED,
+      note: '一期成果交付，待客户验收',
+    },
+    {
+      contractId: 'c0000000-0000-4000-8000-000000000017',
+      amount: 120000,
+      date: ago(15),
+      quantity: 40,
+      unit: '套',
+      status: DELIVERY_STATUS.ACCEPTED,
+      note: '首批家具到货并验收通过',
+    },
+    {
+      contractId: 'c0000000-0000-4000-8000-000000000017',
+      amount: 60000,
+      date: ago(5),
+      quantity: 20,
+      unit: '套',
+      status: DELIVERY_STATUS.DELIVERED,
+      note: '第二批到货，待验收',
+    },
+    {
+      contractId: 'c0000000-0000-4000-8000-000000000017',
+      amount: 20000,
+      date: ago(3),
+      quantity: 8,
+      unit: '套',
+      status: DELIVERY_STATUS.REJECTED,
+      note: '规格不符已退回，不计入已交付金额',
+    },
+    {
+      contractId: 'c0000000-0000-4000-8000-000000000018',
+      amount: 300000,
+      date: ago(40),
+      quantity: 1,
+      unit: '批',
+      status: DELIVERY_STATUS.ACCEPTED,
+      note: '首批原料验收通过',
+    },
+    {
+      contractId: 'c0000000-0000-4000-8000-000000000018',
+      amount: 200000,
+      date: ago(20),
+      quantity: 1,
+      unit: '批',
+      status: DELIVERY_STATUS.ACCEPTED,
+      note: '尾批原料验收通过',
+    },
+  ]
+  dataset.deliveries = deliveries.map((item, index) => ({
+    id: deliveryId(index + 1),
+    contractId: item.contractId,
+    date: item.date,
+    amount: item.amount,
+    quantity: item.quantity,
+    unit: item.unit,
+    status: item.status,
+    note: item.note,
+    createdAt: iso(`${item.date}T04:00:00.000Z`),
+    updatedAt: iso(`${item.date}T04:00:00.000Z`),
   }))
 
   dataset.meta.seeded = true

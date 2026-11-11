@@ -12,7 +12,20 @@ import SettingsView from '../views/SettingsView.vue'
 const routes = [
   { path: '/', redirect: '/home' },
   { path: '/home', name: 'home', component: HomeView, meta: { title: '首页' } },
-  { path: '/contracts', name: 'contracts', component: ContractsView, meta: { title: '合同管理' } },
+  // 旧入口兼容：/contracts 重定向到销售合同，并透传 query（书签 #/contracts?quick=... 不失效）
+  { path: '/contracts', redirect: (to) => ({ path: '/contracts/sale', query: to.query }) },
+  {
+    path: '/contracts/sale',
+    name: 'contracts-sale',
+    component: ContractsView,
+    meta: { title: '销售合同', direction: 'sale' },
+  },
+  {
+    path: '/contracts/purchase',
+    name: 'contracts-purchase',
+    component: ContractsView,
+    meta: { title: '采购合同', direction: 'purchase' },
+  },
   { path: '/personnel', name: 'personnel', component: PersonnelView, meta: { title: '人员档案' } },
   { path: '/dicts', name: 'dicts', component: DictsView, meta: { title: '字典配置' } },
   { path: '/settings', name: 'settings', component: SettingsView, meta: { title: '系统设置' } },

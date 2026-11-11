@@ -149,10 +149,11 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Collection,
   DataBoard,
-  Document,
   Expand,
   Fold,
+  Sell,
   Setting,
+  ShoppingCart,
   Tickets,
   User,
 } from '@element-plus/icons-vue'
@@ -172,7 +173,8 @@ const drawerVisible = ref(false)
 
 const menus = [
   { path: '/home', label: '首页看板', icon: DataBoard },
-  { path: '/contracts', label: '合同管理', icon: Document },
+  { path: '/contracts/sale', label: '销售合同', icon: Sell },
+  { path: '/contracts/purchase', label: '采购合同', icon: ShoppingCart },
   { path: '/personnel', label: '人员档案', icon: User },
   { path: '/dicts', label: '字典配置', icon: Collection },
   { path: '/settings', label: '系统设置', icon: Setting },
