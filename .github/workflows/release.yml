@@ -68,7 +68,22 @@ jobs:
         run: npm run typecheck
 
       - name: 单元 / 集成测试
-        run: npm test
+        shell: pwsh
+        run: |
+          # 失败时把关键行写成注解：仓库无 gh CLI 时也能在 API 里直接看到原因。
+          $log = Join-Path $env:RUNNER_TEMP 'vitest.log'
+          npm test -- --maxWorkers=2 *>&1 | Tee-Object -FilePath $log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            $lines = Get-Content $log |
+              Select-String -Pattern 'FAIL |×|AssertionError|Error: |expected' |
+              Select-Object -First 15 |
+              ForEach-Object { $_.Line.Trim() }
+            $msg = $lines -join '%0A'
+            if ([string]::IsNullOrWhiteSpace($msg)) { $msg = (Get-Content $log -Tail 15) -join '%0A' }
+            Write-Output "::error title=vitest 失败::$msg"
+            exit $code
+          }
 
       - name: 构建（后端 dist + 前端产物）
         run: npm run build

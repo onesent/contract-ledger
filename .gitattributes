@@ -1,0 +1,11 @@
+# 全仓库统一 LF：测试里有逐字节比较（渠道清单 / winget 清单），
+# Windows 运行机默认 core.autocrlf=true 会把检出内容转成 CRLF 导致误报。
+* text=auto eol=lf
+
+# 二进制资产不做换行转换。
+*.zip binary
+*.node binary
+*.db binary
+*.exe binary
+*.png binary
+*.ico binary

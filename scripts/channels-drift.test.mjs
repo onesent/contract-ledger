@@ -36,6 +36,16 @@ function readText(file) {
   return readFileSync(path.join(ROOT, file), 'utf8')
 }
 
+/**
+ * 统一换行：运行机 core.autocrlf=true 时检出内容是 CRLF，
+ * 这里的逐字节比较不能被换行风格影响（真正的格式漂移仍会被发现）。
+ * @param {string} text 文本
+ * @returns {string}
+ */
+function normalize(text) {
+  return text.replaceAll('\r\n', '\n')
+}
+
 const pkg = readJson('package.json')
 const channels = readJson('channels/channels.json')
 const manifests = renderWingetManifests(channels)
@@ -75,13 +85,16 @@ describe('渠道清单与分发包一致', () => {
   })
 
   it('磁盘上的 channels.json 与生成器输出逐字节一致', () => {
-    expect(readText('channels/channels.json')).toBe(renderChannelsJson(channels))
+    expect(normalize(readText('channels/channels.json'))).toBe(normalize(renderChannelsJson(channels)))
   })
 
   it('磁盘上的 winget 清单与生成器输出逐字节一致（含本地化文件）', () => {
     for (const { file, content } of manifests) {
       expect(existsSync(path.join(ROOT, file)), `缺少清单 ${file}`).toBe(true)
-      expect(readText(file), `${file} 与生成器输出不一致，请运行 npm run package:channels`).toBe(content)
+      expect(
+        normalize(readText(file)),
+        `${file} 与生成器输出不一致，请运行 npm run package:channels`,
+      ).toBe(normalize(content))
     }
   })
 
