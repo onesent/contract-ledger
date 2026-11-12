@@ -10,6 +10,6 @@ Scope: user
 Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/onesent/contract-ledger/releases/download/v1.0.0/ledger-1.0.0-win-x64.zip
-    InstallerSha256: 53821225F315BAEE9F30456CB48A283561BD5405AD2C37B503941F8FDD53342A
+    InstallerSha256: EC47E0AC2D09FF7216DB0A66828672DE45438DC2A749C9245151F4C3C0991BBA
 ManifestType: installer
 ManifestVersion: 1.10.0
