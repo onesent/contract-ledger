@@ -6,9 +6,6 @@
         {{ info.engineLabel }}
       </el-tag>
     </el-tooltip>
-    <el-tooltip :content="capacityTip" placement="top">
-      <el-tag type="info" effect="plain" size="small">已用 {{ usedText }}</el-tag>
-    </el-tooltip>
     <span class="storage-counts small">
       合同 <b>{{ info.counts.contracts }}</b>
       收款 <b>{{ info.counts.payments }}</b>
@@ -35,29 +32,21 @@
           </el-tag>
         </el-tooltip>
       </el-descriptions-item>
-      <el-descriptions-item label="已用容量">{{ capacityText }}</el-descriptions-item>
-      <el-descriptions-item label="数据体积">{{ usedText }}</el-descriptions-item>
+      <el-descriptions-item label="服务版本">{{ info.server?.version || '—' }}</el-descriptions-item>
+      <el-descriptions-item label="Schema 版本">{{ info.server?.schemaVersion || '—' }}</el-descriptions-item>
       <el-descriptions-item label="合同 / 收款">
         {{ info.counts.contracts }} 份 / {{ info.counts.payments }} 条
       </el-descriptions-item>
-      <el-descriptions-item label="人员 / 字典">
-        {{ info.counts.personnel }} 名 / {{ info.counts.dicts }} 项
+      <el-descriptions-item label="交付 / 人员">
+        {{ info.counts.deliveries }} 条 / {{ info.counts.personnel }} 名
       </el-descriptions-item>
-      <el-descriptions-item label="设置 / meta">1 组 / 1 条</el-descriptions-item>
+      <el-descriptions-item label="字典 / 设置">
+        {{ info.counts.dicts }} 项 / {{ info.settingsCount }} 组
+      </el-descriptions-item>
       <el-descriptions-item label="上次备份">{{ lastBackupText }}</el-descriptions-item>
       <el-descriptions-item label="上次导入">{{ lastImportText }}</el-descriptions-item>
       <el-descriptions-item label="运行方式">
-        <el-tag :type="info.portable ? 'warning' : 'success'" effect="plain" size="small">
-          {{ info.portable ? '便携模式（file://）' : 'localhost / 正式站点' }}
-        </el-tag>
-      </el-descriptions-item>
-      <el-descriptions-item label="IndexedDB">
-        <el-tag :type="info.idbAvailable ? 'success' : 'info'" effect="plain" size="small">
-          {{ info.idbAvailable ? '可用' : '不可用' }}
-        </el-tag>
-        <span v-if="!info.idbAvailable && info.idbError" class="small muted" style="margin-left: 6px">
-          {{ info.idbError }}
-        </span>
+        <el-tag type="success" effect="plain" size="small">本地服务（127.0.0.1）</el-tag>
       </el-descriptions-item>
     </el-descriptions>
 
@@ -77,7 +66,7 @@
       show-icon
       :closable="false"
       style="margin-top: 12px"
-      title="存储提示"
+      title="服务提示"
     >
       {{ info.lastError }}
     </el-alert>
@@ -86,7 +75,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { formatDateTime, formatStorage } from '../utils/format'
+import { formatDateTime } from '../utils/format'
 import { useLedger } from '../composables/useLedger'
 
 const props = defineProps({
@@ -98,41 +87,14 @@ const ledger = useLedger()
 const info = ledger.storageInfo
 const descriptionColumns = computed(() => (props.columns >= 1 ? props.columns : 2))
 
-const engineTagType = computed(() => {
-  if (!info.value.writable) return 'danger'
-  if (info.value.engine === 'indexeddb') return 'success'
-  return 'warning'
-})
+const engineTagType = computed(() => (info.value.writable ? 'success' : 'danger'))
 
-const dotClass = computed(() => {
-  if (!info.value.writable) return 'is-danger'
-  if (info.value.engine === 'indexeddb') return ''
-  return 'is-warning'
-})
+const dotClass = computed(() => (info.value.writable ? '' : 'is-danger'))
 
 const engineTip = computed(() => {
-  if (info.value.engine === 'indexeddb') return 'IndexedDB：事务写入，刷新 / 重启浏览器后数据保留'
-  if (info.value.engine === 'localstorage') return 'localStorage 降级：仅适合小规模数据，写满时停止录入'
-  return '内存只读模式：仅可浏览与导出'
+  if (!info.value.writable) return '本地服务当前只读：仅可浏览与导出'
+  return '本地服务（SQLite 单事务写入）：数据保存在 data/ledger.db，服务只监听 127.0.0.1'
 })
-
-const usedBytes = computed(() => {
-  const usage = info.value.usage || {}
-  // 内存只读模式没有持久化数据，直接展示数据体积，避免把浏览器全局占用误报为本应用已用容量
-  if (info.value.engine === 'memory') return usage.bytes ?? null
-  return usage.usage ?? usage.bytes ?? null
-})
-
-const usedText = computed(() => formatStorage(usedBytes.value))
-
-const capacityText = computed(() => {
-  const usage = info.value.usage || {}
-  if (usedBytes.value === null) return '未知'
-  if (usage.quota) return `${formatStorage(usedBytes.value)} / ${formatStorage(usage.quota)}`
-  return `${formatStorage(usedBytes.value)}（配额未知）`
-})
-
-const capacityTip = computed(() => `数据体积 ${usedText.value}；容量由浏览器统一分配`)
 
 const lastBackupText = computed(() => formatDateTime(ledger.data.meta.lastBackupAt, '尚未备份'))
 const lastImportText = computed(() => formatDateTime(ledger.data.meta.lastImportAt, '尚未导入'))

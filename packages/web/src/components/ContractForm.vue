@@ -125,17 +125,8 @@
         </el-col>
         <el-col :xs="24" :sm="12">
           <el-form-item :label="funding.received" prop="receivedAmount">
-            <el-input-number
-              v-model="form.receivedAmount"
-              :min="0"
-              :max="Number(form.amount) || 0"
-              :precision="precision"
-              :step="1000"
-              controls-position="right"
-              placeholder="0.00"
-              style="width: 100%"
-            />
-            <div class="derived-hint">也可在列表中使用「登记{{ funding.verb }}」自动累加</div>
+            <el-input :model-value="formatMoney(form.receivedAmount, precision)" disabled class="readonly-field" />
+            <div class="derived-hint">由「登记{{ funding.verb }}」流水自动累加，不可手改；开账余额请经导入备份维护</div>
           </el-form-item>
         </el-col>
 
@@ -186,14 +177,8 @@
 
         <el-col :xs="24" :sm="12">
           <el-form-item :label="funding.date">
-            <el-date-picker
-              v-model="form.paymentDate"
-              type="date"
-              value-format="YYYY-MM-DD"
-              format="YYYY-MM-DD"
-              :placeholder="`最近一次${funding.verb}日期`"
-              style="width: 100%"
-            />
+            <el-input :model-value="form.paymentDate ? formatDate(form.paymentDate) : '—'" disabled class="readonly-field" />
+            <div class="derived-hint">取最近一笔{{ funding.verb }}流水日期，随流水自动更新</div>
           </el-form-item>
         </el-col>
         <el-col :xs="24" :sm="12">
@@ -282,55 +267,6 @@
             <el-input :model-value="formatDateTime(form.updatedAt, '—')" disabled class="readonly-field" />
           </el-form-item>
         </el-col>
-
-        <el-col :span="24">
-          <el-form-item label="附件元信息">
-            <div style="width: 100%">
-              <el-upload
-                ref="uploadRef"
-                :auto-upload="false"
-                :before-upload="() => false"
-                :on-change="onFileChange"
-                :show-file-list="false"
-                drag
-                multiple
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.txt"
-              >
-                <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-                <div class="el-upload__text">拖拽文件到此处，或 <em>点击选择</em></div>
-                <template #tip>
-                  <div class="el-upload__tip">
-                    仅记录文件名 / 大小 / 备注，不上传、不写入真实路径（自动上传已关闭）。
-                  </div>
-                </template>
-              </el-upload>
-
-              <el-table
-                v-if="form.attachments.length"
-                :data="form.attachments"
-                size="small"
-                border
-                style="margin-top: 10px"
-              >
-                <el-table-column prop="name" label="文件名" min-width="180" show-overflow-tooltip />
-                <el-table-column label="大小" width="100">
-                  <template #default="{ row }">{{ formatFileSize(row.size) }}</template>
-                </el-table-column>
-                <el-table-column label="备注" min-width="160">
-                  <template #default="{ row }">
-                    <el-input v-model="row.note" size="small" maxlength="80" placeholder="附件备注" />
-                  </template>
-                </el-table-column>
-                <el-table-column label="操作" width="76" align="center">
-                  <template #default="{ $index }">
-                    <el-button link type="danger" @click="removeAttachment($index)">移除</el-button>
-                  </template>
-                </el-table-column>
-              </el-table>
-              <p v-else class="derived-hint">尚未添加附件元信息（可选）。</p>
-            </div>
-          </el-form-item>
-        </el-col>
       </el-row>
     </el-form>
 
@@ -368,19 +304,18 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import dayjs from 'dayjs'
-import { MagicStick, Refresh, UploadFilled } from '@element-plus/icons-vue'
+import { MagicStick, Refresh } from '@element-plus/icons-vue'
 import { useLedger } from '../composables/useLedger'
 import { registerUnsavedGuard } from '../router'
 import { contractRules } from '../utils/validate'
 import {
+  formatDate,
   formatDateTime,
-  formatFileSize,
   formatMoney,
   formatPercent,
   toNumber,
 } from '../utils/format'
 import { extractContract } from '../ai/provider'
-import { nowIso, uuid } from '../utils/id'
 import { useMediaQuery } from '../composables/useMediaQuery'
 
 const props = defineProps({
@@ -396,7 +331,6 @@ const isNarrow = useMediaQuery('(max-width: 1023px)')
 const precision = ledger.precision
 
 const formRef = ref(null)
-const uploadRef = ref(null)
 const saving = ref(false)
 const aiVisible = ref(false)
 const aiText = ref('')
@@ -448,8 +382,6 @@ function blankContract() {
     ownerId: '',
     statusChangedAt: null,
     note: '',
-    attachments: [],
-    statusLogs: [],
     createdAt: '',
     updatedAt: '',
   }
@@ -533,15 +465,7 @@ const isDirty = computed(() => {
 })
 
 function serialize() {
-  return {
-    ...form,
-    attachments: form.attachments.map((item) => ({
-      id: item.id,
-      name: item.name,
-      size: item.size,
-      note: item.note,
-    })),
-  }
+  return { ...form }
 }
 
 function load() {
@@ -555,10 +479,6 @@ function load() {
   form.deliveredAmount = toNumber(source.deliveredAmount, 0)
   form.lastDeliveryDate = source.lastDeliveryDate || ''
   form.note = source.note || ''
-  form.attachments = Array.isArray(source.attachments)
-    ? source.attachments.map((item) => ({ ...item, note: item.note || '' }))
-    : []
-  form.statusLogs = Array.isArray(source.statusLogs) ? source.statusLogs : []
   if (!form.statusCode) {
     const enabledStatuses = (ledger.dictsByCategory.value.contractStatus || []).filter(
       (item) => item.enabled !== false,
@@ -570,17 +490,10 @@ function load() {
   if (!form.id && !form.no) form.no = ledger.actions.generateContractNo()
   if (!form.startDate) form.startDate = form.signDate || ''
   aiText.value = ''
-  fileListReset()
   loadedKey.value = JSON.stringify(serialize())
   nextTick(() => {
     if (formRef.value) formRef.value.clearValidate()
   })
-}
-
-function fileListReset() {
-  if (uploadRef.value && typeof uploadRef.value.clearFiles === 'function') {
-    uploadRef.value.clearFiles()
-  }
 }
 
 watch(
@@ -626,10 +539,7 @@ async function submit() {
   }
   saving.value = true
   try {
-    const payload = {
-      ...form,
-      attachments: form.attachments.map((item) => ({ ...item })),
-    }
+    const payload = { ...form }
     // 已交付金额与最后交付日期只能由交付明细维护，提交载荷中一律剔除
     delete payload.deliveredAmount
     delete payload.lastDeliveryDate
@@ -693,28 +603,6 @@ function disabledDueDate(date) {
   const base = form.startDate || form.signDate
   if (!base) return false
   return dayjs(date).isBefore(dayjs(base), 'day')
-}
-
-function onFileChange(file) {
-  if (!file || !file.raw) return
-  if (form.attachments.length >= 10) {
-    ElMessage.warning('最多记录 10 个附件元信息')
-    fileListReset()
-    return
-  }
-  form.attachments.push({
-    id: uuid(),
-    name: file.name,
-    size: file.size,
-    note: '',
-    addedAt: nowIso(),
-  })
-  fileListReset()
-  ElMessage.success('已记录附件元信息（不会上传文件）')
-}
-
-function removeAttachment(index) {
-  form.attachments.splice(index, 1)
 }
 
 async function runAi() {

@@ -69,57 +69,24 @@
             <el-tooltip :content="storageTip" placement="bottom">
               <el-tag :type="engineTagType" effect="plain" size="small">{{ storageInfo.engineLabel }}</el-tag>
             </el-tooltip>
-            <el-tag
-              v-if="storageInfo.portable"
-              class="portable-tag"
-              type="warning"
-              effect="dark"
-              size="small"
-            >
-              便携模式
-            </el-tag>
             <el-tag v-if="!storageInfo.writable" type="danger" effect="plain" size="small">只读</el-tag>
+            <el-button v-if="auth.authenticated.value" text size="small" @click="signOut">
+              退出配对
+            </el-button>
           </div>
         </el-header>
 
         <el-main class="app-main">
-          <!-- 便携模式（file://）醒目横幅 -->
-          <el-alert
-            v-if="storageInfo.portable"
-            class="portable-alert"
-            type="warning"
-            show-icon
-            :closable="false"
-            title="当前为便携模式（file://）"
-            style="margin-bottom: 14px"
-          >
-            浏览器对本地文件的存储行为未定义，数据与本文件路径绑定；移动、重命名或换浏览器打开都可能导致数据看似丢失。
-            请定期导出备份，正式使用建议用 localhost 方式打开。
-          </el-alert>
-
-          <!-- 存储降级提示 -->
-          <el-alert
-            v-if="storageInfo.engine === 'localstorage'"
-            type="warning"
-            show-icon
-            :closable="false"
-            title="已降级为 localStorage"
-            style="margin-bottom: 14px"
-          >
-            IndexedDB 不可用（{{ storageInfo.idbError || '原因未知' }}），当前使用 localStorage，仅适合小规模数据，
-            写满时会明确失败并停止录入。建议立即导出备份，并在支持的浏览器中用 localhost 方式打开。
-          </el-alert>
-
           <!-- 只读模式横幅 -->
           <el-alert
             v-if="!storageInfo.writable"
             type="error"
             show-icon
             :closable="false"
-            title="当前为只读模式：写入已停止"
+            title="当前服务处于只读模式：写入已停止"
             style="margin-bottom: 14px"
           >
-            {{ storageInfo.writeError?.message || storageInfo.lastError || '浏览器禁用了本地存储（可能是隐私模式或站点数据被清除）。' }}
+            {{ storageInfo.writeError?.message || storageInfo.lastError || '本地服务数据库当前不可写。' }}
             所有新增 / 编辑 / 删除入口已禁用，仅可浏览与导出。
             <div class="toolbar" style="margin-top: 8px">
               <el-button size="small" type="primary" @click="exportNow">立即导出备份</el-button>
@@ -135,7 +102,7 @@
         <el-footer class="app-footer" height="auto">
           <StorageStatus compact />
           <div class="footer-note">
-            数据仅保存在本机浏览器 · 导出 JSON 才是真正的存档 · 应用不上传任何服务器
+            数据保存在本机 SQLite（仅 127.0.0.1 服务可访问）· 导出 JSON 是异地存档 · 应用不发起外部网络请求
           </div>
         </el-footer>
       </el-container>
@@ -161,6 +128,7 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import StorageStatus from './components/StorageStatus.vue'
 import { createLedger, provideLedger } from './composables/useLedger'
 import { useMediaQuery } from './composables/useMediaQuery'
+import { auth, signOut as endSession } from './api/auth'
 
 const ledger = provideLedger(createLedger())
 const route = useRoute()
@@ -184,17 +152,12 @@ const activeMenu = computed(() => (route.path.startsWith('/') ? route.path : '/h
 const currentTitle = computed(() => (route.meta && route.meta.title ? String(route.meta.title) : ''))
 const storageInfo = ledger.storageInfo
 
-const engineTagType = computed(() => {
-  if (!storageInfo.value.writable) return 'danger'
-  if (storageInfo.value.engine === 'indexeddb') return 'success'
-  return 'warning'
-})
+const engineTagType = computed(() => (storageInfo.value.writable ? 'success' : 'danger'))
 
 const storageTip = computed(() => {
   const info = storageInfo.value
-  if (info.engine === 'indexeddb') return 'IndexedDB 主引擎：事务写入，刷新与重启浏览器后数据保留'
-  if (info.engine === 'localstorage') return 'localStorage 降级：仅适合小规模数据，写满时会停止录入'
-  return '内存只读模式：仅可浏览与导出'
+  if (!info.writable) return '本地服务当前只读：仅可浏览与导出'
+  return `本地服务在线（SQLite 事务写入）· 版本 ${info.server?.version || '—'}`
 })
 
 /**
@@ -207,12 +170,14 @@ function go(path) {
 
 async function exportNow() {
   const result = await ledger.actions.exportBackup()
-  if (result.ok) {
-    if (result.warning) ElMessage.warning(result.warning)
-    else ElMessage.success(`已导出 ${result.fileName}`)
-  } else {
-    ElMessage.error(result.message || '导出失败')
-  }
+  if (result.ok) ElMessage.success(`已导出 ${result.fileName}`)
+  else ElMessage.error(result.message || '导出失败')
+}
+
+async function signOut() {
+  await endSession()
+  ElMessage.success('已退出配对')
+  router.replace('/pair')
 }
 
 watch(
@@ -231,32 +196,23 @@ watch(
   },
 )
 
-onMounted(async () => {
-  // 首次启动：空库时询问是否载入演示数据（可一键清空，不是不可移除的硬编码数据源）
-  if (ledger.data.contracts.length === 0 && !ledger.data.meta.seeded) {
-    try {
-      await ElMessageBox.confirm(
-        '检测到空数据库。是否载入 15 条覆盖常见场景的演示数据（执行中 / 已完结 / 已终止 / 逾期 / 零金额 / 跨年度等）？演示数据可随时在「系统设置 → 数据管理」中一键清空。',
-        '首次使用',
-        {
-          confirmButtonText: '载入演示数据',
-          cancelButtonText: '从空白开始',
-          type: 'info',
-          distinguishCancelAndClose: true,
-        },
-      )
-      const result = await ledger.actions.loadDemoData()
-      if (result.ok) {
-        ElMessage.success(
-          `已载入演示数据：${result.counts.contracts} 份合同 / ${result.counts.payments} 条收款 / ${result.counts.personnel} 名人员`,
-        )
-      } else {
-        ElMessage.error(result.message || '载入演示数据失败')
-      }
-    } catch {
-      await ledger.actions.markSeeded()
-      ElMessage.info('已跳过着，可随时在「系统设置 → 数据管理」中载入演示数据')
-    }
-  }
+onMounted(() => {
+  void bootstrap()
 })
+
+// 配对完成 / 会话恢复后加载台账数据。
+watch(
+  () => auth.authenticated.value,
+  (ok) => {
+    if (ok) void bootstrap()
+  },
+)
+
+async function bootstrap() {
+  if (!auth.authenticated.value || ledger.status.ready) return
+  const result = await ledger.actions.init()
+  if (!result.ok && result.message) {
+    ElMessage.error({ message: result.message, duration: 8000, showClose: true })
+  }
+}
 </script>

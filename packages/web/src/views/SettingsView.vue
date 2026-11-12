@@ -26,24 +26,9 @@
       <StorageStatus :columns="isNarrow ? 1 : 2" />
 
       <div class="section-actions" style="margin-top: 14px">
-        <el-button @click="refreshCapacity">
+        <el-button :loading="refreshing" @click="reloadData">
           <el-icon><Refresh /></el-icon>
-          刷新容量
-        </el-button>
-        <el-tooltip
-          :disabled="ledger.storageInfo.value.engine !== 'indexeddb' || writable"
-          content="IndexedDB 写入已正常，无需迁移"
-          placement="top"
-        >
-          <span>
-            <el-button type="primary" plain :loading="migrating" @click="recheckStorage">
-              <el-icon><SwitchButton /></el-icon>
-              {{ ledger.storageInfo.value.engine === 'indexeddb' ? '重试写入' : '重新检测并迁移到 IndexedDB' }}
-            </el-button>
-          </span>
-        </el-tooltip>
-        <el-button v-if="ledger.storageInfo.value.writeError" type="danger" plain @click="retryWrite">
-          立即重试写入
+          从服务刷新数据
         </el-button>
       </div>
 
@@ -52,12 +37,10 @@
         :closable="false"
         show-icon
         style="margin-top: 12px"
-        title="降级语义"
+        title="本地服务存储"
       >
-        IndexedDB 为主引擎，导入等写入使用单事务，失败整体回滚；
-        localStorage 降级仅适合小规模数据，写满（QuotaExceededError）时会明确报错并停止录入；
-        内存只读模式会禁用所有写入入口，只能浏览与导出。
-        引擎恢复可用后可一键迁移，迁移会按 id 去重并保留 updatedAt 较新的记录，迁移成功后清理 localStorage 副本，避免双份数据互相覆盖。
+        数据由本地服务独占管理（SQLite，WAL 模式，data/ledger.db）：所有写入经领域命令在单事务内提交，失败整体回滚。
+        服务只监听 127.0.0.1，运行期零外部网络请求。数据库不可写时服务进入只读模式，写入入口自动禁用，浏览与导出不受影响。
       </el-alert>
     </el-card>
 
@@ -135,12 +118,15 @@
       </el-form>
 
       <div class="section-actions">
-        <el-tooltip :disabled="writable" content="仅可浏览与导出（当前为只读模式）" placement="top">
+        <el-tooltip content="设置写入将在后续版本开放" placement="top">
           <span>
-            <el-button type="primary" :disabled="!writable" :loading="savingGeneral" @click="saveGeneral">保存设置</el-button>
+            <el-button type="primary" disabled :loading="savingGeneral" @click="saveGeneral">保存设置</el-button>
           </span>
         </el-tooltip>
         <el-button @click="restoreDefaults">恢复默认值（不保存）</el-button>
+        <p class="form-tip">
+          服务端暂无设置写命令：本页设置为只读（来自导出备份的 settings.app），修改不会保存。业务设置调整请经导入备份完成。
+        </p>
       </div>
     </el-card>
 
@@ -203,9 +189,9 @@
       </el-form>
 
       <div class="section-actions">
-        <el-tooltip :disabled="writable" content="仅可浏览与导出（当前为只读模式）" placement="top">
+        <el-tooltip content="设置写入将在后续版本开放" placement="top">
           <span>
-            <el-button type="primary" :disabled="!writable" :loading="savingAi" @click="saveAi">保存 AI 配置</el-button>
+            <el-button type="primary" disabled :loading="savingAi" @click="saveAi">保存 AI 配置</el-button>
           </span>
         </el-tooltip>
         <el-tooltip :disabled="aiReady" content="请在设置中配置 AI 后使用" placement="top">
@@ -215,6 +201,7 @@
         </el-tooltip>
       </div>
       <p class="form-tip">
+        本页 AI 配置只读（导出备份已剔除密钥）；保存入口将在服务端提供设置写命令后开放。
         测试连通性在未配置时禁用；即使已配置，当前占位实现也不会发起网络请求，只会如实提示。
       </p>
       </el-card>
@@ -227,7 +214,7 @@
           <el-icon><Document /></el-icon>
           <span class="card-header-title">操作日志（最近 20 条）</span>
           <div class="card-header-spacer" />
-          <span class="small muted">由负责人转交等敏感操作写入，存放在 meta.opLogs</span>
+          <span class="small muted">审计记录由本地服务在写入事务内保存（audit_log）</span>
         </div>
       </template>
       <el-table :data="opLogs" size="small" border>
@@ -246,7 +233,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   Coin,
@@ -254,13 +241,11 @@ import {
   MagicStick,
   Refresh,
   Setting,
-  SwitchButton,
 } from '@element-plus/icons-vue'
 import StorageStatus from '../components/StorageStatus.vue'
 import BackupPanel from '../components/BackupPanel.vue'
 import { useLedger } from '../composables/useLedger'
 import { useMediaQuery } from '../composables/useMediaQuery'
-import { registerUnsavedGuard } from '../router'
 import { AI_PROVIDERS, complete } from '../ai/provider'
 import { createSettings } from '../data/schema'
 import { formatDateTime } from '../utils/format'
@@ -503,38 +488,20 @@ async function testAi() {
   }
 }
 
-// ---------- 存储 ----------
-const migrating = ref(false)
+// ---------- 数据刷新 ----------
+const refreshing = ref(false)
 
-async function refreshCapacity() {
-  await ledger.actions.refreshStorageUsage()
-  ElMessage.success('容量信息已刷新')
-}
-
-async function recheckStorage() {
-  migrating.value = true
+async function reloadData() {
+  refreshing.value = true
   try {
-    const result = await ledger.actions.migrateStorage()
-    if (result.ok) {
-      const beforeText = result.before
-        ? `（迁移前：合同 ${result.before.contracts}、收款 ${result.before.payments}、人员 ${result.before.personnel}、字典 ${result.before.dicts}）`
-        : ''
-      const afterText = result.after
-        ? `；迁移后：合同 ${result.after.contracts}、收款 ${result.after.payments}、人员 ${result.after.personnel}、字典 ${result.after.dicts}`
-        : ''
-      ElMessage.success(`${result.message}${beforeText}${afterText}`)
-    } else {
-      ElMessage.error(result.message || '存储检测失败')
-    }
+    await ledger.actions.refresh()
+    loadGeneral()
+    ElMessage.success('已从服务刷新数据')
+  } catch (error) {
+    ElMessage.error(`刷新失败：${error && error.message ? error.message : String(error)}`)
   } finally {
-    migrating.value = false
+    refreshing.value = false
   }
-}
-
-async function retryWrite() {
-  const result = await ledger.actions.retryStorage()
-  if (result.ok) ElMessage.success('写入已恢复正常')
-  else ElMessage.error(result.message || '写入仍然失败')
 }
 
 // ---------- 操作日志 ----------
@@ -543,12 +510,7 @@ const opLogs = computed(() => {
   return logs.slice().reverse().slice(0, 20)
 })
 
-// ---------- 未保存守卫 / 锚点 ----------
-const unregisterGuard = registerUnsavedGuard(() =>
-  generalDirty.value ? '系统设置还有未保存的修改，离开页面将丢失。' : '',
-)
-onBeforeUnmount(() => unregisterGuard())
-
+// ---------- 锚点 ----------
 const aiSection = ref(null)
 const backupSection = ref(null)
 

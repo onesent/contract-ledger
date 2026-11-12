@@ -4,13 +4,16 @@ import ContractsView from '../views/ContractsView.vue'
 import PersonnelView from '../views/PersonnelView.vue'
 import DictsView from '../views/DictsView.vue'
 import SettingsView from '../views/SettingsView.vue'
+import PairView from '../views/PairView.vue'
+import { auth, ensureSession, setUnauthorizedRedirect } from '../api/auth'
 
 /**
- * 路由：一律使用 hash 模式，file:// 下刷新、前进后退均可用。
- * 路由组件静态引入（不分包），确保单文件产物自包含。
+ * 路由：保持 hash 模式（刷新 / 前进后退不依赖服务端 rewrite）。
+ * 数据面全部走本地服务 API；/pair 之外的页面必须先有会话。
  */
 const routes = [
   { path: '/', redirect: '/home' },
+  { path: '/pair', name: 'pair', component: PairView, meta: { title: '连接本地服务', public: true } },
   { path: '/home', name: 'home', component: HomeView, meta: { title: '首页' } },
   // 旧入口兼容：/contracts 重定向到销售合同，并透传 query（书签 #/contracts?quick=... 不失效）
   { path: '/contracts', redirect: (to) => ({ path: '/contracts/sale', query: to.query }) },
@@ -36,6 +39,13 @@ export const router = createRouter({
   history: createWebHashHistory(),
   routes,
   scrollBehavior: () => ({ top: 0 }),
+})
+
+/** 会话失效（任意请求 401）时跳转配对页，并带上原目标。 */
+setUnauthorizedRedirect(() => {
+  const current = router.currentRoute.value
+  if (current.meta && current.meta.public) return
+  void router.replace({ path: '/pair', query: { redirect: current.fullPath } })
 })
 
 /** @type {Set<() => string>} */
@@ -65,7 +75,16 @@ function collectGuardMessage() {
 }
 
 router.beforeEach(async (to, from) => {
+  // 1) 认证：/pair 公开；其余页面必须先有会话（任意请求 401 会经 auth 回调跳回配对页）。
+  if (!(to.meta && to.meta.public)) {
+    const ok = await ensureSession()
+    if (!ok && !auth.authenticated.value) {
+      return { path: '/pair', query: { redirect: to.fullPath } }
+    }
+  }
   if (to.path === from.path) return true
+
+  // 2) 未保存修改守卫。
   const message = collectGuardMessage()
   if (!message) return true
   try {

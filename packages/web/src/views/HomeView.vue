@@ -47,13 +47,11 @@
     </el-alert>
 
     <el-card v-if="ledger.data.contracts.length === 0" shadow="never">
-      <el-empty description="台账还是空的：可以载入演示数据体验全部功能，或直接新增第一份合同">
+      <el-empty description="台账还是空的：新增第一份合同，或在系统设置中导入既有备份">
         <el-tooltip :disabled="writable" content="仅可浏览与导出（当前为只读模式）" placement="top">
           <span><el-button type="primary" :disabled="!writable" @click="goCreate">新增{{ directionName }}</el-button></span>
         </el-tooltip>
-        <el-tooltip :disabled="writable" content="仅可浏览与导出（当前为只读模式）" placement="top">
-          <span><el-button :disabled="!writable" @click="loadDemo">载入演示数据</el-button></span>
-        </el-tooltip>
+        <el-button @click="go('/settings', { section: 'backup' })">导入备份</el-button>
       </el-empty>
     </el-card>
 
@@ -415,22 +413,6 @@ async function exportNow() {
     ElMessage.error(result.message || '导出失败')
     return
   }
-  if (result.warning) ElMessage.warning(result.warning)
-  else ElMessage.success(`已导出 ${result.fileName}`)
-}
-
-async function loadDemo() {
-  try {
-    await ElMessageBox.confirm('将用演示数据替换当前数据，建议先导出备份。', '载入演示数据', {
-      confirmButtonText: '载入',
-      cancelButtonText: '取消',
-      type: 'warning',
-    })
-  } catch {
-    return
-  }
-  const result = await ledger.actions.loadDemoData()
-  if (result.ok) ElMessage.success('演示数据已载入')
-  else ElMessage.error(result.message || '载入失败')
+  ElMessage.success(`已导出 ${result.fileName}`)
 }
 </script>

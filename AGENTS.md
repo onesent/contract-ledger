@@ -1,172 +1,117 @@
 # AGENTS.md
 
-面向 AI 编码代理的工程规范。`README.md` 面向用户；冲突时以本文件与 `package.json` 为准。
+面向 AI 编码代理的工程规范。`README.md` 面向用户；冲突时以本文件、`DECISIONS.md` 与 `openspec/changes/agent-native-ledger` 为准。
+
+本仓库是「本地服务 + SQLite + CLI + MCP + Vue UI」的 agent 原生台账（OpenSpec 变更 `agent-native-ledger`）。后端与前端迁移均已完成。
 
 ---
 
-## 1. 项目
+## 1. 项目形态
 
-- 纯前端合同台账：Vue 3 + Vue Router（hash）+ Element Plus + ECharts + dayjs + Vite。
-- 构建产物为单个自包含 `dist/index.html`；零后端、零外链、零网络请求。
-- 数据仅存浏览器：IndexedDB → localStorage → 内存只读；JSON 备份才是存档。
-- 源码分模块；依赖版本以 `package.json` 为准（README 的版本可能滞后，例如 echarts 实际为 6.1.0）。
+- Monorepo（npm workspaces）。后端包用 TypeScript，前端 `packages/web` 迁移后仍用 Vue 3 + JavaScript。
+- 真相源是本地 SQLite（`data/ledger.db`，WAL），由只监听回环的本地服务独占管理。浏览器 IndexedDB/localStorage 不再是数据源。
+- 依赖版本以各 `packages/*/package.json` 与根 `package.json` 为准；`design.md` 的选型（better-sqlite3 / Kysely / Postgrator / Zod / Hono / Commander / MCP SDK）为冻结决策，见 `DECISIONS.md`。
 
----
+## 2. 包布局与归属
 
-## 2. 硬约束（违反即失败）
+| 包 | 名称 | 职责 | 不得做 |
+| --- | --- | --- | --- |
+| `packages/core` | `@ledger/core` | Zod schema、18 条领域命令、`dispatch`、派生查询、错误码目录、审计模型 | 任何 IO（不碰文件、数据库、网络） |
+| `packages/storage-sqlite` | `@ledger/storage-sqlite` | better-sqlite3 连接、Kysely 仓储、Postgrator 迁移、视图、触发器、备份、导入导出 | 感知 HTTP/UI；金额用浮点 |
+| `packages/server` | `@ledger/server` | Hono 服务：认证中间件链、只读端点、命令端点、导出/导入端点 | 业务规则（下沉 core）；直接拼 SQL |
+| `packages/cli` | `@ledger/cli` | `ledger` 命令行：领域命令 + describe/validate/query/backup/export/import/auth | 重复实现 core 逻辑 |
+| `packages/mcp` | `@ledger/mcp` | stdio MCP server + 能力发现产物 | 另写一套命令层（必须复用 core 注册表） |
+| `packages/web` | `@ledger/web` | Vue 3 前端：API 客户端、配对页与业务页面 | 直接访问 SQLite/浏览器存储；组件内直接 `fetch` |
 
-1. `dist/` 只能有 `index.html`，体积 ≤ 5 MB。
-2. 运行期禁止 `fetch / XHR / WebSocket / 外链字体 / 外链图片 / CDN / 外链 favicon`。
-3. 必须使用 `createWebHashHistory()`。
-4. 持久化写入只经 `src/data/store.js` 的 `applyChanges()`；组件不得直接操作 `data` 或浏览器存储。
-5. 派生字段（未收金额、收款进度、逾期/临期、统计等）实时计算，不落库、不可编辑。
-6. 导出备份必须剔除 `apiKey`、`baseUrl`、`ai.enabled`。
-7. AI 默认占位实现零网络；唯一出口是 `src/ai/provider.js`。
-8. 不引入 TypeScript，不新增 `.ts/.tsx`。
-9. 写入失败必须明确报错并停止写入，不得谎报成功。
-10. UI 优先复用 Element Plus；禁止手写表格、分页、弹窗、Toast、确认框、日历、进度条、图表。
+旧 `src/` 浏览器应用与单文件构建已移除；不要重新引入 IndexedDB/localStorage 作为真相，也不要恢复单文件构建。
 
----
+## 3. 硬约束（违反即失败）
 
-## 3. 数据流与职责
+1. 所有写操作只经 core 命令 handler → `storage-sqlite` 单事务提交；组件/路由/适配器不得绕过 `dispatch` 自行增删改。
+2. 金额一律整数分（`INTEGER`，列名 `*_cents`），禁止 `REAL` 存金额；元↔分转换用 half-up 舍入。
+3. 派生值（已付/未付/资金进度/交付进度/逾期/临期/错位差额/统计）只存在于 SQL 视图（`v_contract_finance`、`v_contract_delivery`、`v_contract_full`），不落库、不可手改；写操作只写事实（合同、流水、交付）。
+4. 服务只绑定回环（`127.0.0.1` / `::1` / `localhost`），拒绝 `0.0.0.0`；运行期后端零外部网络请求。
+5. 密钥（`apiKey`、`baseUrl`、`ai.enabled`）不得进入源码、演示/种子数据、日志或导出备份；导出经 `sanitizeSettingsForExport` 递归剔除。
+6. 幂等唯一权威是 `idempotency_keys(actor, command, key)` 表；`payments`/`deliveries` 不设幂等列（`DECISIONS.md`）。
+7. 全局数据集版本存 `meta.version`，每次成功写事务 +1；`expectedVersion` 不符返回 `STALE_WRITE`。
+8. 审计（`audit_log`）与状态日志（`contract_status_logs`）在写命令同一事务内由应用层写入；触发器只做金额守卫，不写审计。
+9. 命令结果统一信封 `{ ok, code?, message?, hint?, details?, retryable?, data?, diff?, version?, meta }`；调用方判断 `ok`。
+10. 提交前 `npm run typecheck` 与 `npm test` 必须通过；不得放宽断言或跳过校验来「让它通过」。
+11. 不引入约定外技术：后端保持 TypeScript，前端不引入 TypeScript；不新增破坏单库一致性的旁路存储。
 
-```text
-views / components
-  → useLedger()              inject 的 ledger，Vue 侧唯一数据出口
-  → ledger.actions.*         领域操作，返回 { ok, code?, message?, ... }
-  → store.applyChanges()     合并变更 → 深拷贝 → 单事务持久化 → 更新响应式 data
-  → computed → UI
-```
+## 4. 命令契约
 
-- `src/data/store.js`：存储三态、事务、容量；不感知 UI。
-- `src/composables/useLedger.js`：全部领域操作与派生 computed；`App.vue` 中 provide。
-- `src/utils/*.js`：纯函数（格式化、校验、派生统计），不要放组件逻辑。
-- `src/views/`：页面组合；`src/components/`：业务组合组件。
-- `src/ai/provider.js`：唯一 AI 出口；`src/utils/echarts.js`：唯一 ECharts 注册点。
+- 命令名点号（`contract.upsert`），CLI 拆 `ledger contract upsert`，MCP 工具名 snake_case（`contract_upsert`，点号在 MCP 非法）。
+- 元参数（`idempotency_key`、`expected_version`、`dry_run`）是显式工具/命令参数，不依赖传输层状态（MCP v2 无会话）。
+- 写命令必须带 `idempotency_key`；相同键+相同指纹重放首次结果，相同键+不同内容返回 `IDEMPOTENCY_KEY_REUSED`。
+- `dry_run` 只返回字段级 `diff`，不写入、不递增版本。
+- 错误码、HTTP 状态、可重试性与修复建议在 `core/contracts/error-codes.ts` 的 `ERROR_CATALOG` 集中定义；新增错误码必须同步补全目录与测试。
+- CLI 退出码：`0` 成功、`1` 业务失败、`2` 用法/校验错误、`4` 未认证（`cli/src/exit-codes.ts`）。
+- 新增/修改命令后必须重新生成发现产物（见 §7），保持 `schema/commands.json`、`docs/AGENTS.ledger.md`、`llms.txt` 与注册表一致。
 
-**禁止**：组件直接 import store；直接读写 `localStorage/indexedDB`；直接修改 `data.*`；绕过 `useLedger` 自行增删改查。
+## 5. 认证与 HTTP
 
-数据一致性：
+- 双凭证平面：浏览器 `HttpOnly; SameSite=Strict` 会话 Cookie（`ledger_sid`）+ 可读 CSRF Cookie（`ledger_csrf`）；agent 用 `ldg_<tokenId>_<secret>` bearer 令牌。
+- 秘密只在签发/配对时明文出现一次，库中只存 SHA-256 哈希；比较用 `timingSafeEqual`（`safeEqualHex` / `constantTimeEqual`），禁止 `===` 比哈希。
+- 中间件顺序固定（`server/src/app.ts`）：Host 白名单 → Cookie 写请求精确 Origin → 认证 → Cookie 写请求 CSRF 双提交 → 限流 → 业务。Bearer 请求免 Origin/CSRF（无环境凭证）。
+- Cookie 不按端口隔离（RFC 6265 §8.5），故 CSRF 不能只靠 SameSite，必须精确 Origin + 双提交。
+- 配对码：8 位、32 字符无歧义字母表、TTL 120 秒、单次使用、错误上限 5；HTTP 配对限流 5 次/分钟，一般认证限流 30 次/分钟。
+- 只认证不授权：任意已认证主体能力相同，差异只体现在审计 `actor`。
+- 只读模式（`AppOptions.readonly`）拒绝写命令与导入（`403 READONLY`），读与导出保持可用。
+- 威胁模型与逐条测试证据见 `docs/security.md`；改动认证/中间件必须同步更新该文档并保证断言有测试支撑。
 
-- 业务记录必须有 `id`、`createdAt`、`updatedAt`，`updatedAt` 由存储层刷新。
-- 合同状态变更同时写 `statusChangedAt` 与 `statusLogs`（旧值/新值/时间/操作人）。
-- 登记/删除收款必须同步维护合同 `receivedAmount` 与 `paymentDate`，并与流水在同一事务写入。
-- 删除被引用的字典项/人员必须拦截；人员离职前需批量转交。
+## 6. 代码风格
 
----
-
-## 4. 开发规范
-
-### 4.1 代码风格
-
-- Vue 3 `<script setup>` + Composition API；Vue API（`ref`、`computed` 等）显式 import。
-- Element Plus 组件与 `ElMessage` / `ElMessageBox` / `ElNotification` 由 resolver 自动导入；不要手动 import 组件，也不要 `app.use(ElementPlus)`。
-- 图标必须从 `@element-plus/icons-vue` 显式 import；禁止图标字体、外链 SVG、emoji。
-- 2 空格缩进、单引号、不写分号、多行结构尾逗号。
-- 组件/视图文件 `PascalCase.vue`，变量/函数 `camelCase`，常量 `UPPER_SNAKE_CASE`。
-- 导出函数、复杂逻辑、领域对象用 JSDoc；注释与用户文案用中文，标识符用英文。
-- `src/` 内不使用 `console.*`；错误通过返回值、`ElMessage`/`ElNotification` 或 `status.lastError` 呈现。
-- 禁止空 `catch`；确需忽略时写 `/* ignore */` 并说明原因。
-- 禁止 `as any`、`@ts-ignore`、`@ts-expect-error`。
-- 业务计算放 `utils/derive.js`，不要塞进模板或 `watch`。
-
-### 4.2 数据写入
-
-- 所有写操作返回 `{ ok, code?, message? }`；调用方必须判断 `ok` 并反馈用户。
-- 多集合操作必须放进同一次 `applyChanges`，保证原子性。
-- `put` 按 id 新增/更新；`remove` 按集合 + id 删除；`replace` 整库替换。
-- `touch: false` 仅用于导入/替换/演示数据等不刷新 `updatedAt` 的场景。
-- 写入前必须使用纯数据（`cloneDataset`），Vue 响应式 Proxy 不能被 IndexedDB 直接克隆。
-- 只读模式（`status.writable === false`）下禁用所有写入口，并用 `el-tooltip` 说明“仅可浏览与导出”。
-- 配额/安全错误后不要自行恢复可写状态，走 `retryWrite()` / `recheckStorage()`。
-
-### 4.3 Schema 变更
-
-1. 更新 `src/data/schema.js` 的集合、默认值与演示数据。
-2. 递增 `SCHEMA_VERSION`，在 `migrateDataset()` 写幂等迁移（只补齐/规范化，不丢数据）。
-3. 更新 `validateBackup()` 的字段校验与 `normalizeSettings()` / `normalizeMeta()` 默认值。
-4. 涉及表格列时更新 `CONTRACT_COLUMNS` 与列显隐默认值。
-5. 同步 README 的数据结构与版本说明。
-
-### 4.4 校验、金额与日期
-
-- 表单规则统一写在 `src/utils/validate.js`（`contractRules` / `paymentRules` / `personnelRules` / `dictRules`），禁止模板内手写校验 UI。
-- 跨字段校验通过 `getValues()` 读取当前表单值。
-- 业务日期用 `YYYY-MM-DD` 字符串，时间戳用 ISO，统一 `dayjs` 解析。
-- 金额计算前用 `toNumber()` / `isFiniteNumber()`，舍入用 `roundMoney()`，展示用 `formatMoney` / `formatPercent` / `formatNumber`。
+- TypeScript：严格类型，无 `any`、无 `@ts-ignore`；`switch` 穷尽；错误用 `LedgerError`（带 `code` + `details`）传递，不解析 message。
+- 后端 2 空格缩进、单引号、不写分号、多行尾逗号；导出函数与领域对象用 JSDoc。
+- 注释与用户文案（错误 hint、CLI 描述）用中文，标识符用英文。
+- 业务日期 `YYYY-MM-DD`，时间戳 ISO-8601 UTC；金额计算前用有限数校验，展示用格式化纯函数。
 - 非法/缺失值显示 `—`，绝不出现 `NaN` / `Infinity`；合同金额为 0 时进度返回 `null`。
-- 业务下拉必须实时读字典/人员档案，禁止硬编码选项数组。
+- `packages/` 内不使用 `console.*`（`bin.ts` 入口的进程输出除外）；错误经返回值、信封或 problem+json 呈现，禁止空 `catch`。
+- 前端沿用 Element Plus 复用约定：表格/分页/表单/弹窗/确认/提示/空态/加载/图表一律用 EP 或既有 `ChartPanel`，不手写 UI 基建组件（`Base*`）；图标从 `@element-plus/icons-vue` 显式 import；中文 locale 由 `el-config-provider` 提供。
 
-### 4.5 UI 与交互
-
-- 复用映射：表格 `el-table`、分页 `el-pagination`、表单 `el-form`、弹窗 `el-dialog`、确认 `ElMessageBox.confirm`、提示 `ElMessage`、空态 `el-empty`、加载 `v-loading`、图表 `ChartPanel.vue`。
-- `src/components/` 禁止 `Base*` 基建组件。
-- 删除、清空、覆盖导入、离职等危险操作必须二次确认并说明后果。
-- 禁用按钮外包 `<span>` 再挂 `el-tooltip`；图标按钮提供 `aria-label`，保留 `:focus-visible`。
-- 响应式断点 `1023px`；新增列表页必须提供窄屏卡片布局或无横向溢出的方案。
-- 中文 locale 由 `main.js` 提供 `ep-locale`，`App.vue` 用 `<el-config-provider>` 包裹。
-
-### 4.6 样式
-
-- 全局样式放 `src/styles/`：`theme.css`（EP 变量 + `--ledger-*`）、`layout.css`、`pages.css`。
-- 优先复用已有类名与 CSS 变量；禁止内联魔法色值。
-- 组件 `scoped` 样式仅用于局部特例（当前只有 `BackupPanel.vue`）。
-- 禁止外链字体/图片/图标；字体用系统字体栈，favicon 用内联 `data:image/svg+xml`。
-- 布局改动需检查 375px / 800px / 桌面三档，不得横向溢出。
-
-### 4.7 存储、备份与 AI
-
-- 存储三态不可弱化：IndexedDB 主引擎 → localStorage 小数据兜底 → 内存只读。
-- 写入错误区分 `QUOTA` / `SECURITY` / `WRITE_FAILED`，给出可操作提示。
-- 导出：`snapshot()` → `sanitizeSettingsForBackup()` → `downloadText()`，全程零网络。
-- 导入：`parseBackupText` → `validateBackup` → 自动下载快照 → `applyChanges({ replace })` 单事务写入。
-- 密钥只能存在 `settings.ai` 本机数据中；不得写入源码、演示数据、日志或备份。
-- AI 方法保持 `{ ok, configured, action, status, message, data, meta }`；默认实现 `meta.network === false`；接入真实模型只替换 `complete()`。
-
-### 4.8 构建与依赖
-
-- 路由视图必须静态引入；禁止动态 `import()` 造成分包。
-- ECharts 只从 `src/utils/echarts.js` 引入，新图表类型在该文件注册。
-- 不配置 `manualChunks`、`external` 等破坏单文件的选项。
-- 新增依赖必须保证产物 ≤ 5 MB 且不引入外链资源。
-- 不提交 `dist/`、`node_modules/`、`.omo/`、`.codegraph/`。
-
-### 4.9 Git
-
-- 未明确要求时不 commit / push / 开 PR。
-- 一个提交只做一件事，建议 Conventional Commits（如 `fix(storage): 配额失败后停止写入`）。
-- 提交前检查 `git status` / `git diff`，不得带密钥、备份 JSON、构建产物。
-
----
-
-## 5. 常见坑
-
-1. 直接 `structuredClone(data)` 会因 Vue Proxy 失败，写入前用 `cloneDataset()`。
-2. `file://` 的存储行为未定义，不能假设一定持久化，必须保留便携横幅与导出引导。
-3. localStorage 写满时必须抛错并停止录入，不能静默失败。
-4. hash 路由守卫在浏览器前进/后退时 URL 可能已变，`router/index.js` 的 `replaceState` 复原逻辑不要破坏。
-5. EP 组件与 `ElMessage` 自动导入，但 Vue API 不会自动导入。
-6. ECharts 必须 `init → setOption → resize → dispose`，并清理 `ResizeObserver`。
-7. 首页统计、提醒条数、列表筛选必须共用 `utils/derive.js` 的同一套纯函数。
-8. 月度收款趋势按 `payments` 流水聚合；手改 `receivedAmount` 不产生流水。
-9. 演示数据日期按载入当天相对生成，修改时保持“任何日期都成立”。
-
----
-
-## 6. 验收
+## 7. 构建、测试与验收
 
 ```bash
-npm run dev       # http://localhost:5173
-npm run build     # 产出 dist/index.html
-npm run check     # 校验单文件自包含，必须全部通过
-npm run preview   # http://localhost:8080
+npm install
+npm run typecheck     # tsc -b 编译全部 TS 包 + 类型检查 test/integration
+npm test              # vitest run：后端、CLI e2e、MCP stdio、HTTP、集成与前端单测
+npm run validate      # check-runtime + typecheck + test
 ```
 
-项目无 lint / test / typecheck 脚本。改动代码的最低验收：
+按包测试：`npm run test -w @ledger/server`（cli / mcp 同理）。
 
-- `npm run build && npm run check` 全部通过，产物 ≤ 5 MB。
-- 编辑器诊断无新增错误（若环境提供 LSP）。
-- 手工冒烟：首页、合同管理、人员档案、字典配置、系统设置均可用，控制台无报错。
-- 涉及存储/备份/布局时，额外验证只读模式、`file://` 便携模式、375px 窄屏。
+重新生成能力发现产物（改命令后必跑）：
 
-不要放宽 `scripts/check-singlefile.mjs` 的断言来让检查通过。
+```bash
+npm run build -w @ledger/mcp
+npm run discovery -w @ledger/mcp
+```
+
+运行：
+
+```bash
+node packages/server/dist/bin.js --data ./data --port 4517   # 打印 URL + 一次性配对码
+node packages/cli/dist/bin.js <command> ... --json           # CLI（bin 名 ledger）
+node packages/mcp/dist/bin.js --db ./data/ledger.db          # MCP stdio（--legacy 回退 v1）
+```
+
+改动代码的最低验收：
+
+- `npm run typecheck` 与 `npm test` 全部通过；编辑器诊断无新增错误。
+- 改命令/schema：发现产物与注册表一致（`discovery.test.ts`、`describe` 输出）。
+- 改认证/中间件：`docs/security.md` 的每条受保护断言仍有测试。
+- 涉及导入导出：v2 fixture 导入后 `validate` 业务 `violations` 为空、记录数一致。
+- 前端相关：`npm run build -w @ledger/web` 与 `npx vitest run packages/web` 通过；手工冒烟首页/合同/人员/字典/设置经 API 加载无报错，375px 与桌面无横向溢出。
+
+## 8. Git
+
+- 未明确要求时不 commit / push / 开 PR。
+- 一个提交只做一件事，Conventional Commits（如 `feat(mcp): 增加 --legacy v1 通道`）。
+- 提交前检查 `git status` / `git diff`，不得带密钥、备份 JSON、`data/`、`node_modules/`、`dist/`、`.omo/`、`.codegraph/`。
+
+## 9. 已知不一致（勿据此反向修改代码）
+
+- 设计文档提及 `data/.secret` / `data/.token` 文件，当前代码未实现：令牌经 `auth token create` 一次性输出，`AppOptions.secret` 不参与 Cookie 签名。文档按现状描述。
+- `design.md` 假定 MCP 默认协议 2026-07-28，实测 `@modelcontextprotocol/server@2.4.0` 协商为 `2025-11-25`（见 `packages/mcp/docs/mcp-compat.md`）。
+- 暂无 settings 写命令；业务设置仅可经导入或后续变更补齐。

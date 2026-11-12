@@ -119,7 +119,8 @@
 
       <div class="filter-summary">
         <span class="small muted">
-          共 {{ filtered.length }} 条（全部 {{ directionContracts.length }} 条）
+          共 {{ paginationTotal }} 条（本方向全部 {{ directionContracts.length }} 条）
+          <span v-if="clientFilterActive">· 快捷 / 区间筛选在当前页内细化</span>
         </span>
         <el-tag
           v-for="tag in activeFilterTags"
@@ -165,8 +166,8 @@
     <el-card v-if="!isNarrow" shadow="never" class="table-card">
       <ContractTable
         ref="tableRef"
-        :contracts="paged"
-        :loading="!ledger.status.ready"
+        :contracts="displayRows"
+        :loading="ledger.loading.value"
         :visible="ledger.visibleColumns.value"
         :precision="precision"
         :default-sort="defaultSort"
@@ -182,11 +183,11 @@
         @selection-change="onSelectionChange"
         @sort-change="onSortChange"
       />
-      <div v-if="filtered.length" class="pagination-bar">
+      <div v-if="paginationTotal" class="pagination-bar">
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
-          :total="filtered.length"
+          :total="paginationTotal"
           :page-sizes="[10, 20, 50, 100]"
           background
           layout="total, sizes, prev, pager, next, jumper"
@@ -196,7 +197,7 @@
 
     <!-- 窄屏卡片布局 -->
     <div v-else class="mobile-card-list">
-      <el-card v-for="row in paged" :key="row.id" class="mobile-card" shadow="never">
+      <el-card v-for="row in displayRows" :key="row.id" class="mobile-card" shadow="never">
         <div class="mobile-card-head">
           <div class="mobile-card-title">{{ row.no }}</div>
           <el-tag effect="plain" size="small" :style="tagStyle(row.statusColor)">{{ row.statusName }}</el-tag>
@@ -266,14 +267,14 @@
           </el-tooltip>
         </div>
       </el-card>
-      <el-empty v-if="!paged.length" description="暂无符合条件的合同">
+      <el-empty v-if="!displayRows.length" description="暂无符合条件的合同">
         <el-button type="primary" :disabled="!writable" @click="openCreate">新增{{ directionName }}</el-button>
       </el-empty>
-      <div v-if="filtered.length" class="pagination-bar">
+      <div v-if="paginationTotal" class="pagination-bar">
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
-          :total="filtered.length"
+          :total="paginationTotal"
           :page-sizes="[10, 20, 50]"
           size="small"
           background
@@ -288,7 +289,7 @@
         type="info"
         :closable="false"
         show-icon
-        title="设置会自动记忆到浏览器存储的设置项中（销售与采购共用同一列配置）"
+        title="列显隐仅在本次会话内生效（设置写入将在后续版本开放；销售与采购共用同一列配置）"
         style="margin-bottom: 12px"
       />
       <el-checkbox-group v-model="visibleProps" class="column-checkbox-group" @change="persistVisibility">
@@ -586,10 +587,50 @@ const ownerFilterOptions = computed(() =>
 )
 const payMethodOptions = computed(() => ledger.dictOptions.value.payMethod || [])
 
-/** 当前方向的合同（销售入口看不到采购合同，反之亦然）。 */
+/** 当前方向的合同全量快照（详情 / 弹窗 / 客户端筛选兜底用；销售入口看不到采购合同）。 */
 const directionContracts = computed(() => ledger.contractsByDirection.value[direction.value] || [])
 
+/** 表格 prop → 服务端排序字段（未列出的 prop 走客户端管线）。 */
+const SERVER_SORT_FIELDS = {
+  no: 'no',
+  customer: 'counterparty',
+  amount: 'amountCents',
+  unpaid: 'unpaidCents',
+  percent: 'fundingPercent',
+  dueDate: 'dueDate',
+  signDate: 'signDate',
+  updatedAt: 'updatedAt',
+}
+
+const hasNumber = (value) => value !== null && value !== undefined && value !== ''
+
+/** 服务端无法表达的筛选（快捷 / 类型 / 多值 / 区间 / 日期）→ 触发客户端管线。 */
+const clientFilterActive = computed(() =>
+  filters.quick !== 'all' ||
+  filters.typeCodes.length > 0 ||
+  filters.statusCodes.length > 1 ||
+  filters.ownerIds.length > 1 ||
+  Boolean(filters.signedFrom || filters.signedTo || filters.dueFrom || filters.dueTo) ||
+  hasNumber(filters.amountMin) ||
+  hasNumber(filters.amountMax) ||
+  hasNumber(filters.progressMin) ||
+  hasNumber(filters.progressMax) ||
+  hasNumber(filters.deliveryMin) ||
+  hasNumber(filters.deliveryMax) ||
+  filters.hasUnpaid,
+)
+
+/** 排序列是否可交给服务端。 */
+const serverSortActive = computed(() => Boolean(sort.order) && Boolean(SERVER_SORT_FIELDS[sort.prop]))
+
+/**
+ * 客户端管线：存在服务端不支持的筛选或排序时，基于全量快照本地筛选 / 排序 / 分页；
+ * 否则列表完全由服务端分页驱动（page/pageSize/search/status/owner/sort → /api/contracts）。
+ */
+const useClientPipeline = computed(() => clientFilterActive.value || !serverSortActive.value)
+
 const filtered = computed(() => {
+  if (!useClientPipeline.value) return directionContracts.value
   const keyword = filters.keyword.trim().toLowerCase()
   return directionContracts.value.filter((contract) => {
     if (filters.quick && filters.quick !== 'all') {
@@ -609,19 +650,19 @@ const filtered = computed(() => {
     if (filters.signedTo && (!contract.signDate || contract.signDate > filters.signedTo)) return false
     if (filters.dueFrom && (!contract.dueDate || contract.dueDate < filters.dueFrom)) return false
     if (filters.dueTo && (!contract.dueDate || contract.dueDate > filters.dueTo)) return false
-    if (filters.amountMin !== null && filters.amountMin !== undefined && toNumber(contract.amount) < filters.amountMin) return false
-    if (filters.amountMax !== null && filters.amountMax !== undefined && toNumber(contract.amount) > filters.amountMax) return false
-    if (filters.progressMin !== null && filters.progressMin !== undefined) {
+    if (hasNumber(filters.amountMin) && toNumber(contract.amount) < filters.amountMin) return false
+    if (hasNumber(filters.amountMax) && toNumber(contract.amount) > filters.amountMax) return false
+    if (hasNumber(filters.progressMin)) {
       if (contract.fundingPercent === null || contract.fundingPercent < filters.progressMin) return false
     }
-    if (filters.progressMax !== null && filters.progressMax !== undefined) {
+    if (hasNumber(filters.progressMax)) {
       if (contract.fundingPercent === null || contract.fundingPercent > filters.progressMax) return false
     }
     // 交付进度区间：金额为 0（进度为 null，显示「—」）的合同在设定区间时被排除
-    if (filters.deliveryMin !== null && filters.deliveryMin !== undefined) {
+    if (hasNumber(filters.deliveryMin)) {
       if (contract.deliveryPercent === null || contract.deliveryPercent < filters.deliveryMin) return false
     }
-    if (filters.deliveryMax !== null && filters.deliveryMax !== undefined) {
+    if (hasNumber(filters.deliveryMax)) {
       if (contract.deliveryPercent === null || contract.deliveryPercent > filters.deliveryMax) return false
     }
     if (filters.hasUnpaid && contract.unpaid <= 0) return false
@@ -630,6 +671,7 @@ const filtered = computed(() => {
 })
 
 const sorted = computed(() => {
+  if (!useClientPipeline.value) return filtered.value
   const list = filtered.value.slice()
   if (!sort.prop || !sort.order) return list
   const dir = sort.order === 'ascending' ? 1 : -1
@@ -662,10 +704,41 @@ const sorted = computed(() => {
   return list
 })
 
-const paged = computed(() => {
+/** 服务端分页的当前页（enriched 后由 useLedger 提供）。 */
+const serverRows = computed(() => ledger.pageContracts.value)
+
+/** 最终展示行：客户端管线本地分页；服务端管线直接用当前页。 */
+const displayRows = computed(() => {
+  if (!useClientPipeline.value) return serverRows.value
   const start = (currentPage.value - 1) * pageSize.value
   return sorted.value.slice(start, start + pageSize.value)
 })
+
+/** 分页总数：客户端管线用筛选结果数，服务端管线用服务端 total。 */
+const paginationTotal = computed(() =>
+  useClientPipeline.value ? sorted.value.length : ledger.total.value,
+)
+
+/** 把服务端可表达的查询参数推给 useLedger（含分页）。 */
+function syncListQuery() {
+  if (useClientPipeline.value) return
+  void ledger.actions.setListQuery({
+    page: currentPage.value,
+    pageSize: pageSize.value,
+    direction: direction.value,
+    search: filters.keyword.trim(),
+    status: filters.statusCodes.length === 1 ? filters.statusCodes[0] : '',
+    owner: filters.ownerIds.length === 1 ? filters.ownerIds[0] : '',
+    sortBy: SERVER_SORT_FIELDS[sort.prop] || 'updatedAt',
+    sortOrder: sort.order === 'ascending' ? 'asc' : 'desc',
+  })
+}
+
+let syncTimer = 0
+function requestSync() {
+  window.clearTimeout(syncTimer)
+  syncTimer = window.setTimeout(syncListQuery, 250)
+}
 
 const activeFilterTags = computed(() => {
   const tags = []
@@ -729,6 +802,7 @@ watch(
   (value) => {
     pageSize.value = Number(value) || 20
     currentPage.value = 1
+    requestSync()
   },
 )
 
@@ -736,6 +810,7 @@ watch(
   () => [filters.keyword, filters.quick, filters.typeCodes.length, filters.statusCodes.length, filters.ownerIds.length, filters.signedFrom, filters.signedTo, filters.dueFrom, filters.dueTo, filters.amountMin, filters.amountMax, filters.progressMin, filters.progressMax, filters.deliveryMin, filters.deliveryMax, filters.hasUnpaid],
   () => {
     currentPage.value = 1
+    requestSync()
   },
 )
 
@@ -743,13 +818,25 @@ watch(
   () => [sort.prop, sort.order],
   () => {
     currentPage.value = 1
+    requestSync()
   },
 )
+
+// 翻页 / 每页条数：服务端分页模式下重新取当前页。
+watch([currentPage, pageSize], () => {
+  requestSync()
+})
+
+// 客户端 / 服务端管线切换：切回服务端时立即取页。
+watch(useClientPipeline, (clientMode) => {
+  if (!clientMode) requestSync()
+})
 
 // 切换销售 / 采购入口时重置分页，避免停留在越界页码
 watch(direction, () => {
   currentPage.value = 1
   clearSelection()
+  requestSync()
 })
 
 function toArray(value) {
@@ -1262,6 +1349,8 @@ async function exportNow() {
 
 onMounted(() => {
   applyRouteQuery()
+  // 初次挂载：把当前筛选 / 分页 / 排序推给服务端取第一页。
+  syncListQuery()
 })
 
 watch(

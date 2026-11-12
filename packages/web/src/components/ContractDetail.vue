@@ -200,23 +200,6 @@
       </div>
 
       <div class="detail-section">
-        <h4>附件元信息（{{ contract.attachments.length }}）</h4>
-        <el-table v-if="contract.attachments.length" :data="contract.attachments" size="small" border>
-          <el-table-column prop="name" label="文件名" min-width="180" show-overflow-tooltip />
-          <el-table-column label="大小" width="100">
-            <template #default="{ row }">{{ formatFileSize(row.size) }}</template>
-          </el-table-column>
-          <el-table-column prop="note" label="备注" min-width="140" show-overflow-tooltip />
-          <el-table-column label="添加时间" width="160">
-            <template #default="{ row }">
-              <span class="muted small">{{ formatDateTime(row.addedAt) }}</span>
-            </template>
-          </el-table-column>
-        </el-table>
-        <el-empty v-else description="暂无附件元信息（仅记录元信息，不上传文件）" :image-size="60" />
-      </div>
-
-      <div class="detail-section">
         <h4>{{ funding.verb }}流水（{{ payments.length }} 条，合计 {{ formatMoney(paymentsTotal, precision) }}）</h4>
         <el-timeline v-if="payments.length" class="timeline-card">
           <el-timeline-item
@@ -309,14 +292,13 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Right } from '@element-plus/icons-vue'
 import { useLedger } from '../composables/useLedger'
 import { useMediaQuery } from '../composables/useMediaQuery'
 import {
   formatDate,
   formatDateTime,
-  formatFileSize,
   formatMoney,
   formatNumber,
   formatPercent,
@@ -347,15 +329,30 @@ const descColumns = computed(() => (isNarrow.value ? 1 : 2))
 const aiReady = computed(() => ledger.aiReady.value)
 const writable = computed(() => ledger.storageInfo.value.writable)
 
-/** 当前方向（缺失 / 非法一律按销售处理，与存储层口径一致）。 */
+/** 详情数据束（GET /api/contracts/:id：流水 / 交付 / 状态日志的权威来源）。 */
+const detail = computed(() => {
+  const bundle = ledger.contractDetail.value
+  if (!bundle || !props.contract || bundle.contract.id !== props.contract.id) return null
+  return bundle
+})
+
+watch(
+  () => [props.modelValue, props.contract ? props.contract.id : ''],
+  ([open, id]) => {
+    if (open && id) void ledger.actions.loadContractDetail(String(id))
+  },
+  { immediate: true },
+)
+
+/** 当前方向（缺失 / 非法一律按销售处理，与领域层口径一致）。 */
 const direction = computed(() => (props.direction === 'purchase' ? 'purchase' : 'sale'))
 const party = computed(() => ledger.partyLabel(direction.value))
 const funding = computed(() => ledger.fundingLabels(direction.value))
 
 const payments = computed(() => {
   if (!props.contract) return []
-  return ledger.data.payments
-    .filter((payment) => payment.contractId === props.contract.id)
+  const rows = detail.value ? detail.value.payments : ledger.data.payments.filter((payment) => payment.contractId === props.contract.id)
+  return rows
     .map((payment) => ({
       ...payment,
       methodName: ledger.dictLookup.value.get(`payMethod:${payment.methodCode}`)?.name || '',
@@ -369,6 +366,14 @@ const paymentsTotal = computed(() =>
 
 const deliveries = computed(() => {
   if (!props.contract) return []
+  if (detail.value) {
+    return detail.value.deliveries
+      .slice()
+      .sort((a, b) => {
+        if (a.date !== b.date) return a.date < b.date ? 1 : -1
+        return String(b.createdAt || '').localeCompare(String(a.createdAt || ''))
+      })
+  }
   return ledger.deliveriesFor(props.contract.id)
 })
 
@@ -428,8 +433,8 @@ const canFinish = computed(() => {
 })
 
 const statusLogs = computed(() => {
-  if (!props.contract || !Array.isArray(props.contract.statusLogs)) return []
-  return props.contract.statusLogs
+  if (!detail.value) return []
+  return detail.value.statusLogs
     .slice()
     .sort((a, b) => new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime())
 })

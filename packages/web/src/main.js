@@ -2,7 +2,6 @@ import { createApp } from 'vue'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import App from './App.vue'
 import router from './router'
-import { init } from './data/store'
 import './styles/theme.css'
 import './styles/layout.css'
 import './styles/pages.css'
@@ -33,31 +32,6 @@ app.config.errorHandler = (err, instance, info) => {
   }
 }
 
-init()
-  .then((result) => {
-    app.mount('#app')
-    if (result && result.message) {
-      setTimeout(() => {
-        ElMessage({
-          message: result.message,
-          type: 'warning',
-          duration: 6000,
-          showClose: true,
-        })
-      }, 400)
-    }
-  })
-  .catch((error) => {
-    // init 内部已做三态兜底，这里处理极端异常：仍然挂载应用（只读模式），避免白屏
-    try {
-      ElNotification({
-        title: '存储初始化异常',
-        message: error && error.message ? error.message : String(error),
-        type: 'error',
-        duration: 10000,
-      })
-    } catch {
-      /* ignore */
-    }
-    app.mount('#app')
-  })
+// 认证与数据加载在路由 / 组件内完成：
+// 路由守卫 ensureSession() 未认证时跳 /pair；App.vue 挂载后经 API 加载台账数据。
+app.mount('#app')
