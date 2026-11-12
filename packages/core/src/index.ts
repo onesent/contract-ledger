@@ -4,6 +4,7 @@
  */
 export * from './commands/canonical.js'
 export * from './commands/dispatch.js'
+export * from './commands/register.js'
 export * from './commands/registry.js'
 export * from './contracts/index.js'
 export * from './describe.js'

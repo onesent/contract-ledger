@@ -15,3 +15,7 @@
 
 - `WriteOptions` 增加 `inputFingerprint`（SHA-256 canonical JSON 入参）与可选 `transport`：幂等表需要指纹判定「同键同内容重放」与「同键不同内容误用」，审计需要来源通道。
 - 新增 `LedgerError extends Error`（携带 `code` + `details`）：SQLite 与内存实现用同一类型向命令分发器传递 STALE_WRITE / DB_BUSY / 金额守卫等错误，避免解析 message。
+
+## Wave 4 契约补充
+
+- `LedgerStore` 增加 `statusLogs: ContractStatusLogRepository`（只追加）：合同状态变化必须在同一写事务内写 `contract_status_logs`，与 `statusChangedAt` 保持一致。

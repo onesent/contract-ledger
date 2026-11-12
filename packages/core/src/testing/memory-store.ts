@@ -16,6 +16,8 @@ import { LedgerError } from '../contracts/ledger-error.js'
 import type {
   ContractListQuery,
   ContractRepository,
+  ContractStatusLogRepository,
+  ContractStatusLogRow,
   DeliveryRepository,
   DictRepository,
   LedgerStore,
@@ -59,6 +61,7 @@ export interface MemoryStoreState {
   readonly personnel: readonly PersonnelRow[]
   readonly dictCategories: readonly DictCategoryRow[]
   readonly dictItems: readonly DictItemRow[]
+  readonly statusLogs: readonly ContractStatusLogRow[]
   readonly audits: readonly MemoryAuditRow[]
   readonly idempotency: readonly MemoryIdempotencyRow[]
   readonly version: number
@@ -72,6 +75,7 @@ interface MemoryState {
   personnel: PersonnelRow[]
   dictCategories: DictCategoryRow[]
   dictItems: DictItemRow[]
+  statusLogs: ContractStatusLogRow[]
   audits: MemoryAuditRow[]
   idempotency: Record<string, MemoryIdempotencyRow>
   version: number
@@ -187,9 +191,10 @@ class MemoryContractRepository implements ContractRepository {
       throw new LedgerError('NOT_FOUND', `合同不存在：${id}`, { id })
     }
     state.contracts.splice(index, 1)
-    // 级联删除：流水与交付明细随合同一并移除。
+    // 级联删除：流水、交付明细与状态日志随合同一并移除。
     state.payments = state.payments.filter((row) => row.contractId !== id)
     state.deliveries = state.deliveries.filter((row) => row.contractId !== id)
+    state.statusLogs = state.statusLogs.filter((row) => row.contractId !== id)
   }
 }
 
@@ -484,6 +489,30 @@ class MemoryDictRepository implements DictRepository {
 }
 
 /**
+ * 合同状态日志仓储实现：只追加，不允许修改或删除。
+ */
+class MemoryContractStatusLogRepository implements ContractStatusLogRepository {
+  constructor(private readonly getState: () => MemoryState) {}
+
+  listByContract(contractId: string): ContractStatusLogRow[] {
+    return this.getState()
+      .statusLogs.filter((row) => row.contractId === contractId)
+      .map((row) => clone(row))
+  }
+
+  insert(row: ContractStatusLogRow): void {
+    const state = this.getState()
+    if (state.contracts.every((item) => item.id !== row.contractId)) {
+      throw new LedgerError('NOT_FOUND', `合同不存在：${row.contractId}`, { id: row.contractId })
+    }
+    if (state.statusLogs.some((item) => item.id === row.id)) {
+      throw new LedgerError('VALIDATION_FAILED', `状态日志 id 已存在：${row.id}`, { id: row.id })
+    }
+    state.statusLogs.push(clone(row))
+  }
+}
+
+/**
  * 创建空内存状态。
  * @returns 版本为 0 的可变状态
  */
@@ -495,6 +524,7 @@ function createEmptyState(): MemoryState {
     personnel: [],
     dictCategories: [],
     dictItems: [],
+    statusLogs: [],
     audits: [],
     idempotency: {},
     version: 0,
@@ -521,6 +551,7 @@ export class MemoryLedgerStore implements LedgerStore {
   readonly deliveries: DeliveryRepository
   readonly personnel: PersonnelRepository
   readonly dicts: DictRepository
+  readonly statusLogs: ContractStatusLogRepository
 
   constructor() {
     this.current = createEmptyState()
@@ -530,6 +561,7 @@ export class MemoryLedgerStore implements LedgerStore {
     this.deliveries = new MemoryDeliveryRepository(getState)
     this.personnel = new MemoryPersonnelRepository(getState)
     this.dicts = new MemoryDictRepository(getState)
+    this.statusLogs = new MemoryContractStatusLogRepository(getState)
   }
 
   getVersion(): number {
@@ -623,6 +655,7 @@ export class MemoryLedgerStore implements LedgerStore {
       personnel: structuredClone(this.current.personnel),
       dictCategories: structuredClone(this.current.dictCategories),
       dictItems: structuredClone(this.current.dictItems),
+      statusLogs: structuredClone(this.current.statusLogs),
       audits: structuredClone(this.current.audits),
       idempotency: Object.values(this.current.idempotency).map((row) => structuredClone(row)),
       version: this.current.version,

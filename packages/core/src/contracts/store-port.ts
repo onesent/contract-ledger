@@ -45,6 +45,23 @@ export interface DeliveryRepository {
   delete(id: string): void
 }
 
+/** 合同状态变更日志。 */
+export interface ContractStatusLogRow {
+  id: string
+  contractId: string
+  fromCode: string
+  toCode: string
+  changedAt: string
+  actor: string
+  note: string
+}
+
+/** 状态日志仓储：只追加，不修改、不删除。 */
+export interface ContractStatusLogRepository {
+  listByContract(contractId: string): ContractStatusLogRow[]
+  insert(row: ContractStatusLogRow): void
+}
+
 /** 人员档案仓储。 */
 export interface PersonnelRepository {
   getById(id: string): PersonnelRow | null
@@ -108,4 +125,5 @@ export interface LedgerStore {
   readonly deliveries: DeliveryRepository
   readonly personnel: PersonnelRepository
   readonly dicts: DictRepository
+  readonly statusLogs: ContractStatusLogRepository
 }
