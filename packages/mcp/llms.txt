@@ -1,0 +1,37 @@
+# 合同台账 Ledger
+
+> 单库、幂等、可审计的合同台账；CLI / HTTP / MCP 共用同一命令契约。
+
+## 功能
+
+- 合同、付款、交付、人员档案与字典维护。
+- 乐观并发（`expected_version`）、幂等重放与 dry-run 差异预览。
+- 统一结果信封与稳定错误码，所有通道行为一致。
+
+## 命令
+
+- `contract_upsert`（contract.upsert）：新增或更新合同（编号唯一、日期先后、负责人在职、方向与金额锁定校验）
+- `contract_get`（contract.get）：按 id 或合同编号读取合同详情（含资金流水、交付明细与状态日志）
+- `contract_list`（contract.list）：分页查询合同列表（支持方向、状态、负责人筛选与多字段排序）
+- `contract_delete`（contract.delete）：删除合同（同事务级联删除其资金流水、交付明细与状态日志）
+- `contract_status_logs`（contract.statusLogs）：读取指定合同的状态变更日志
+- `payment_record`（payment.record）：为合同登记一笔资金流水（累计不得超过合同金额）
+- `payment_list`（payment.list）：按合同查询全部资金流水
+- `payment_delete`（payment.delete）：删除一笔资金流水（合同已付金额与进度自动回退）
+- `delivery_record`（delivery.record）：为合同登记一条交付明细（验收驳回不计入已交付金额）
+- `delivery_list`（delivery.list）：按合同查询全部交付明细（含验收驳回记录）
+- `delivery_delete`（delivery.delete）：删除一条交付明细（已交付金额与最后交付日自动重算）
+- `personnel_upsert`（personnel.upsert）：新增或更新人员档案（人员编号忽略大小写唯一）
+- `personnel_list`（personnel.list）：查询人员档案（可含离职人员，按姓名/编号/联系方式搜索）
+- `personnel_delete`（personnel.delete）：删除人员档案（仍被合同引用时拒绝删除）
+- `personnel_transfer`（personnel.transfer）：把离职/在岗人员名下的全部合同批量转交给另一位在职人员
+- `dict_upsert`（dict.upsert）：新增或更新字典分类或字典项（同分类下编码唯一）
+- `dict_list`（dict.list）：列出字典分类与字典项（可按分类编码过滤字典项）
+- `dict_delete`（dict.delete）：删除字典分类或字典项（仍有字典项或合同引用时拒绝）
+
+## 认证步骤
+
+1. 首次使用在服务终端获取一次性配对码。
+2. 执行 `ledger auth token` 换取 Bearer 令牌（令牌仅存本机）。
+3. HTTP 请求携带 `Authorization: Bearer <token>`；stdio MCP 默认只允许本机进程调用。
+4. 令牌失效后执行 `ledger auth rotate` 生成新令牌。

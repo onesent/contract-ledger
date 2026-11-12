@@ -11,6 +11,14 @@
       "import": "./dist/index.js"
     }
   },
+  "bin": {
+    "ledger-mcp": "./dist/bin.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --root ../.. packages/mcp",
+    "discovery": "node scripts/generate-discovery.mjs"
+  },
   "dependencies": {
     "@ledger/core": "*",
     "@ledger/storage-sqlite": "*",
