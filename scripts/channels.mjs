@@ -13,6 +13,10 @@
  *   node scripts/channels.mjs [--zip <path>] [--version <v>]
  *                             [--github <owner/repo>] [--gitee <owner/repo>]
  *
+ * 只想用已发布产物（不想下载 45MB zip）时，可直接给它算好的校验值：
+ *   node scripts/channels.mjs --version 1.0.0 --sha256 <hex> --size <bytes>
+ * 两者必须同时提供（CI 发布后用 Release 资产的 SHA256SUMS / size 回填仓库快照）。
+ *
  * 渠道分工：GitHub Releases 是主渠道（winget 的 InstallerUrl 指向它），Gitee Release
  * 是同一份产物的镜像（同一 sha256，只换下载域名）。运行期不发任何网络请求，
  * 渠道只负责托管，升级仍是「换一个程序目录」。
@@ -251,19 +255,36 @@ function main() {
   const args = parseArgs(process.argv.slice(2))
   const packageJson = readJson(path.join(ROOT, 'package.json'))
   const version = args.version ?? String(packageJson.version)
-  const zipPath = path.resolve(args.zip ?? path.join(ROOT, 'release', artifactName(version)))
-  if (!existsSync(zipPath)) {
-    process.stderr.write(
-      `找不到分发包：${zipPath}\n` +
-        `渠道清单必须从真实产物生成（版本号与 sha256 都取自它）。\n` +
-        `请先运行 npm run package（或 npm run package:exe）产出分发包。\n`,
-    )
-    process.exitCode = 1
-    return
+
+  // 两条输入路径：真实产物（默认，最可信）或已发布产物的校验值（回填用）。
+  const hasDeclared = args.sha256 !== undefined || args.size !== undefined
+  let sha256
+  let sizeBytes
+  let zipPath = null
+  if (hasDeclared) {
+    if (!/^[0-9a-f]{64}$/i.test(String(args.sha256)) || !/^\d+$/.test(String(args.size))) {
+      process.stderr.write('--sha256（64 位十六进制）与 --size（字节数）必须同时提供且格式正确。\n')
+      process.exitCode = 1
+      return
+    }
+    sha256 = String(args.sha256).toLowerCase()
+    sizeBytes = Number(args.size)
+  } else {
+    zipPath = path.resolve(args.zip ?? path.join(ROOT, 'release', artifactName(version)))
+    if (!existsSync(zipPath)) {
+      process.stderr.write(
+        `找不到分发包：${zipPath}\n` +
+          `渠道清单必须从真实产物生成（版本号与 sha256 都取自它）。\n` +
+          `请先运行 npm run package（或 npm run package:exe）产出分发包；\n` +
+          `若是回填已发布版本，用 --sha256 <hex> --size <bytes> 从 Release 校验值生成。\n`,
+      )
+      process.exitCode = 1
+      return
+    }
+    sha256 = sha256File(zipPath)
+    sizeBytes = statSync(zipPath).size
   }
 
-  const sha256 = sha256File(zipPath)
-  const sizeBytes = statSync(zipPath).size
   const entry = buildEntry({
     version,
     sizeBytes,

@@ -225,5 +225,10 @@ wingetcreate update Onesent.Ledger --version <version> \
 5. 冒烟：解压 zip 到干净目录 → `ledger.exe --version` → 双击/`start` → 配对 → 建合同 → `stop` → 解压上一版 zip 到并列目录并用它启动，确认自动生成 `data\backups\upgrade-*.db` 且数据完整。
 6. 提交并打 tag：`git commit` → `git tag -a v<version> -m "v<version>"` → `git push github master:main --follow-tags`（本地分支 `master`，GitHub 仓库默认分支是 `main`）与 `git push origin master --follow-tags`（Gitee 保留为镜像仓库）。**首次以源码覆盖 GitHub 仓库时**需 `--force-with-lease`（仓库建库时只有自动生成的 LICENSE，先把需要的文件带到本地）。
 7. GitHub Actions 自动出包并发布 Release；发布后在 Gitee Release 手工上传**同一批文件**（zip / `.sha256` / `SHA256SUMS` / `-winget-manifests.zip`）。
-8. winget：用 Release 附件里的清单提交 `wingetcreate submit`（首次）或 `wingetcreate update`（后续）。若 CI 产物的 sha256 与仓库内 `channels/` 不同，把 Release 附件的 `channels.json` 与清单回填提交，保持「仓库快照 = 已发布字节」。
+8. winget：用 Release 附件里的清单提交 `wingetcreate submit`（首次）或 `wingetcreate update`（后续）。若 CI 产物的 sha256 与仓库内 `channels/` 不同，用 Release 资产的校验值回填（不必下载 45MB 包）后再提交：
+
+   ```bash
+   node scripts/channels.mjs --version <version> \
+     --sha256 <Release 的 SHA256SUMS 里的值> --size <Release 资产字节数>
+   ```
 9. 分发包文件名带版本、`ledger.exe` 不带版本：升级即换目录，不需要改文件名。
