@@ -1,8 +1,8 @@
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 
-/** Node.js 最低版本（better-sqlite3 13.x 的预编译与 ESM 行为基线）。 */
-export const MIN_NODE_VERSION = '24.18.0'
+/** Node.js 最低版本（Node 24.x 基线：better-sqlite3 13.x 的 N-API 预编译与 ESM 行为在 24.x 稳定）。 */
+export const MIN_NODE_VERSION = '24.0.0'
 
 /** SQLite 最低版本（3.7.0–3.51.2 存在 WAL checkpoint 并发损坏缺陷）。 */
 export const MIN_SQLITE_VERSION = '3.51.3'
@@ -59,7 +59,7 @@ export function assertRuntime({ nodeVersion = process.versions.node, sqliteVersi
   if (isBelow(nodeVersion, MIN_NODE_VERSION)) {
     throw new Error(
       `Node.js 版本过低：当前 ${nodeVersion}，要求 ≥ ${MIN_NODE_VERSION}。` +
-        '请升级 Node.js（例如使用 nvm 安装 24.18.0 或更高版本）后重新执行 npm install。',
+        '请升级 Node.js（例如使用 nvm 安装 24.0.0 或更高版本）后重新执行 npm install。',
     )
   }
   if (sqliteVersion !== undefined && isBelow(sqliteVersion, MIN_SQLITE_VERSION)) {

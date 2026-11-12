@@ -3,7 +3,7 @@
 ## 1. 工作区与工具链
 
 - [x] 1.1 建立 npm workspaces：`packages/{core,storage-sqlite,cli,server,mcp,web}` 与根 `tsconfig`、`vitest.config`；`npm install` 成功且 `npm run typecheck` 以 0 退出
-- [x] 1.2 增加 `scripts/check-runtime.mjs`：启动时断言 Node ≥ 24.18 且 `SELECT sqlite_version()` ≥ 3.51.3；用低于门槛的模拟值跑单测，断言抛出可读错误
+- [x] 1.2 增加 `scripts/check-runtime.mjs`：启动时断言 Node ≥ 24.0.0（Node 24.x 任一版本）且 `SELECT sqlite_version()` ≥ 3.51.3；用低于门槛的模拟值跑单测，断言抛出可读错误
 - [x] 1.3 根脚本提供 `typecheck` / `test` / `validate` / `build`；在干净克隆上依次执行四个脚本，全部以 0 退出
 - [x] 1.4 引入 `better-sqlite3@13.0.3`、`kysely@0.29.8`、`kysely-codegen@0.20.0`、`postgrator@8.0.1`、`zod@4.6.7`、`hono@4.13.18`、`@hono/node-server@2.1.7`、`commander@15.1.0`、`@modelcontextprotocol/server@2.4.0`、`vitest@5.1.0`；`npm ls --depth=0` 无 extraneous、无 peer 警告
 
@@ -42,16 +42,16 @@
 - [x] 5.4 实现 Cookie 会话与 Bearer 双平面：Cookie 写请求校验 CSRF 头，Bearer 豁免；测试两类主体执行同一命令结果一致、吊销后立即 401
 - [x] 5.5 实现 Hono 读端点：合同/流水/交付/人员/字典列表与详情，服务端分页、筛选、排序；接口测试断言第 2 页与总数正确、派生字段与视图一致
 - [x] 5.6 实现命令端点：映射 `Idempotency-Key`、`If-Match`/`ETag` 与 problem+json；测试 400 缺键、409 并发、412 版本、422 校验、200 成功并返回新 ETag
-- [x] 5.7 实现 `rotate` / `revoke` / `logout` 与 CLI `ledger auth token|rotate|revoke|sessions`；测试轮换后旧令牌 401、会话列表可读
+- [x] 5.7 实现令牌轮换（HTTP `POST /api/auth/tokens/:id/rotate` 与 CLI `auth token rotate`）、`revoke`、浏览器 `logout`，以及 CLI `auth token create|list|revoke|rotate` 与 `auth session list|revoke`；测试轮换后旧令牌 401、会话列表可读
 - [x] 5.8 实现导出/导入端点与只读模式：写失败后转只读、读与导出仍可用；测试返回 `READONLY` 且可导出
 - [x] 5.9 在 `docs/security.md` 记录威胁模型：受保护项（CSRF、DNS rebinding、令牌泄漏）与不受保护项（同 OS 用户进程）；核对文档中的每条断言都有对应测试
 
 ## 6. MCP 与能力发现
 
 - [x] 6.1 实现 stdio MCP server：由命令注册表生成 `tools/list`，带 annotations、`inputSchema`/`outputSchema` 与 `structuredContent`；测试断言工具数量、注解与注册表一致
-- [x] 6.2 增加协议版本开关：默认 v2（2026-07-28），`--legacy` 使用 v1 SDK；用 MCP Inspector 或裸 stdio 脚本各跑一次 `tools/list` 与一次调用
+- [x] 6.2 增加协议版本开关：默认 v2（`@modelcontextprotocol/server` 2.4.0，实测协商 `2025-11-25`），`--legacy` 使用 v1 SDK（协商 `2025-06-18`）；用 MCP Inspector 或裸 stdio 脚本各跑一次 `tools/list` 与一次调用
 - [x] 6.3 生成发现产物：`schema/commands.json`、`AGENTS.md` 片段、`llms.txt`；测试断言 `describe` 输出与 JSON 文件内容一致
-- [x] 6.4 在 `docs/mcp-compat.md` 记录 Claude Code / Codex / Cursor 的握手与调用结果；按文档步骤复跑一次，结果与记录一致
+- [x] 6.4 在 `docs/mcp-compat.md` 记录裸 stdio 协议层的握手与调用结果，并如实标注 Claude Code / Codex / Cursor 宿主集成待实测；按文档步骤复跑一次协议层步骤，结果与记录一致
 
 ## 7. 前端迁移
 
