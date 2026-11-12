@@ -82,39 +82,16 @@ function sha256File(file) {
  * @param {string} version 版本号
  * @returns {string}
  */
+/**
+ * 读取分发包 README 模板并替换版本占位符。
+ * 模板是用户可见文档的唯一来源（docs/distribution-readme.txt），
+ * 其内容与启动器命令面的一致性由 scripts/docs-drift.test.mjs 守护。
+ * @param {string} version 版本号
+ * @returns {string} README.txt 内容
+ */
 function usageText(version) {
-  return [
-    `台账（ledger）v${version}`,
-    '',
-    '本目录就是完整程序（node.exe、node_modules、packages\\web\\dist 都在这里），',
-    'ledger.exe 只是入口；把整个目录放在任意可写位置即可运行，无需安装。',
-    '',
-    '1. 双击 ledger.exe 启动：启动本地服务并打开浏览器。',
-    '2. 首次使用会弹出一次性配对码（120 秒有效），在页面输入即可完成配对；',
-    '   过期请执行 ledger.exe stop 后重新双击。',
-    '3. 数据默认在 %LOCALAPPDATA%\\ledger\\data\\（换目录、升级都不丢）；',
-    '   想把数据放在本目录内（随 U 盘携带）用：ledger.exe --portable start',
-    '4. 常用命令：',
-    '     ledger.exe --version          查看版本',
-    '     ledger.exe status             版本、目录与运行状态',
-    '     ledger.exe stop               停止后台服务',
-    '     ledger.exe cli <参数...>      转发到 ledger CLI（透传退出码）',
-    '5. 升级 = 换目录：把新版本 zip 解压到任意位置，先停旧版本，再用新目录启动',
-    '     ledger-<旧版本>-win-x64\\ledger.exe stop',
-    '     ledger-<新版本>-win-x64\\ledger.exe',
-    '   启动前会自动把数据库备份到 <data>\\backups\\upgrade-<旧版本>-<时间戳>.db；',
-    '   备份失败则不启动。旧目录保留，确认新版本无误后自行删除。',
-    '6. 回滚 = 用旧目录启动：必要时先用上面的备份覆盖 <data>\\ledger.db，',
-    '   并删除 <data>\\ledger.db-wal 与 <data>\\ledger.db-shm，再运行旧目录的 ledger.exe。',
-    '7. 卸载 = 删文件夹：ledger.exe stop 后删除本目录；需要时再删状态根',
-    '   %LOCALAPPDATA%\\ledger（含 data\\、logs\\、run\\、current.json）。',
-    '8. 校验：SHA256SUMS 列出本目录内关键文件的校验值，可用',
-    '     certutil -hashfile ledger.exe SHA256',
-    '   与其中一行比对。',
-    '',
-    '详细说明见仓库 docs/distribution.md。',
-    '',
-  ].join('\n')
+  const template = readFileSync(path.join(ROOT, 'docs/distribution-readme.txt'), 'utf8')
+  return template.replaceAll('{{version}}', version)
 }
 
 /**

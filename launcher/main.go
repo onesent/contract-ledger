@@ -26,8 +26,6 @@ const (
 	exitPayload = 3
 	// exitPort 表示目标端口被占用。
 	exitPort = 4
-	// exitExtract 表示解压分发包失败。
-	exitExtract = 5
 	// exitBackup 表示升级前备份失败（已中止）。
 	exitBackup = 6
 	// healthTimeout 是等待服务就绪的上限。
@@ -44,42 +42,6 @@ type options struct {
 	portable  bool
 	// rest 是转发给 cli / server 的原始参数。
 	rest []string
-}
-
-// usage 返回中文用法说明。
-func usage() string {
-	return `ledger 本地台账
-
-用法：
-  ledger.exe [start] [--port N] [--data DIR] [--install-dir DIR] [--no-browser]
-  ledger.exe stop              停止后台服务
-  ledger.exe status            查看版本、目录与运行状态
-  ledger.exe cli <参数...>     转发到 ledger CLI（透传退出码）
-  ledger.exe server <参数...>  前台启动服务入口（高级用法）
-  ledger.exe version           打印版本
-  ledger.exe help              显示本帮助
-
-子命令与选项顺序无关：ledger.exe --install-dir D:\ledger status 与
-ledger.exe status --install-dir D:\ledger 等价；只有 cli / server
-之后的参数会原样转发给被转发的入口。
-
-选项：
-  --port N           监听端口（默认 4517，仅回环）
-  --data DIR         数据目录（默认 <install-dir>\data）
-  --install-dir DIR  状态根目录（data / logs / run / current.json），
-                     默认 %LOCALAPPDATA%\ledger，可用 LEDGER_HOME 覆盖
-  --no-browser       启动后不打开浏览器
-  --portable         把 exe 所在目录当作状态根（整个文件夹随 U 盘携带）
-
-程序与数据分离：ledger.exe 只做入口，运行时（node.exe / node_modules /
-packages\web\dist / VERSION）与它同目录，来自分发包 zip；业务数据放在状态根。
-升级：把新版本 zip 解压到新目录，用其中的 ledger.exe 启动（跳版本启动会自动
-备份数据库到 <data>\backups\upgrade-<旧版本>-<时间戳>.db）。
-回滚：用旧目录的 ledger.exe 启动，必要时用备份覆盖 ledger.db。
-卸载：直接删除程序目录；需要时再删状态根（含 data）。
-首次启动或首次转发 cli 后会把生效状态根写入 <install-dir>\ledger.conf.json，
-若 exe 不在状态根内还会在 exe 旁写一份，因此后续命令不必重复传 --install-dir。
-`
 }
 
 // takeValue 读取 --name value 形式的取值；支持 --name=value。
@@ -200,27 +162,15 @@ func run(opts options) int {
 		}
 		opts.homeDir = dir
 	}
-	switch opts.command {
-	case "help":
-		fmt.Fprint(out, usage())
-		return exitOK
-	case "version":
-		fmt.Fprintf(out, "ledger %s\n", runtimeVersion(runtimeDir()))
-		return exitOK
-	case "status":
-		return status(opts)
-	case "stop":
-		return stop(opts)
-	case "cli":
-		return passthrough(opts, "cli")
-	case "server":
-		return passthrough(opts, "server")
-	case "start":
-		return start(opts)
-	default:
+	if opts.command == "" {
+		opts.command = defaultCommand()
+	}
+	handler, ok := dispatch[opts.command]
+	if !ok {
 		reportUsage(fmt.Errorf("未知子命令：%s", opts.command))
 		return exitUsage
 	}
+	return handler(opts)
 }
 
 // start 校验运行时并后台起服，就绪后打开浏览器。

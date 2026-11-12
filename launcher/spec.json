@@ -1,0 +1,132 @@
+{
+  "version": "0.0.0-dev",
+  "commands": [
+    {
+      "name": "cli",
+      "usage": "ledger.exe cli <参数...>",
+      "summary": "转发到 ledger CLI（透传退出码）",
+      "forward": true,
+      "hidden": false,
+      "default": false
+    },
+    {
+      "name": "help",
+      "usage": "ledger.exe help",
+      "summary": "显示本帮助",
+      "forward": false,
+      "hidden": false,
+      "default": false
+    },
+    {
+      "name": "server",
+      "usage": "ledger.exe server <参数...>",
+      "summary": "前台启动服务入口（高级用法）",
+      "forward": true,
+      "hidden": false,
+      "default": false
+    },
+    {
+      "name": "spec",
+      "usage": "ledger.exe spec",
+      "summary": "输出子命令与选项的机器可读 JSON 清单（供文档漂移检查）",
+      "forward": false,
+      "hidden": true,
+      "default": false
+    },
+    {
+      "name": "start",
+      "usage": "ledger.exe [start] [选项...]",
+      "summary": "校验运行时、起服、等健康检查并打开浏览器",
+      "forward": false,
+      "hidden": false,
+      "default": true
+    },
+    {
+      "name": "status",
+      "usage": "ledger.exe status",
+      "summary": "查看版本、目录、配置文件与运行状态",
+      "forward": false,
+      "hidden": false,
+      "default": false
+    },
+    {
+      "name": "stop",
+      "usage": "ledger.exe stop",
+      "summary": "停止后台服务（幂等）",
+      "forward": false,
+      "hidden": false,
+      "default": false
+    },
+    {
+      "name": "version",
+      "usage": "ledger.exe version",
+      "summary": "打印版本",
+      "forward": false,
+      "hidden": false,
+      "default": false
+    }
+  ],
+  "options": [
+    {
+      "flag": "--port",
+      "arg": "N",
+      "summary": "监听端口（默认 4517，仅回环）"
+    },
+    {
+      "flag": "--data",
+      "arg": "DIR",
+      "summary": "数据目录（默认 <状态根>\\data）"
+    },
+    {
+      "flag": "--install-dir",
+      "arg": "DIR",
+      "summary": "状态根目录（data / logs / run / current.json），默认 %LOCALAPPDATA%\\ledger，可用 LEDGER_HOME 覆盖"
+    },
+    {
+      "flag": "--no-browser",
+      "arg": "",
+      "summary": "启动后不打开浏览器"
+    },
+    {
+      "flag": "--portable",
+      "arg": "",
+      "summary": "把 exe 所在目录当作状态根（整个文件夹随 U 盘携带）"
+    },
+    {
+      "flag": "--version",
+      "arg": "",
+      "summary": "等价于 version（-v 同义）"
+    },
+    {
+      "flag": "--help",
+      "arg": "",
+      "summary": "等价于 help（-h 同义）"
+    }
+  ],
+  "exitCodes": [
+    {
+      "code": 0,
+      "meaning": "成功"
+    },
+    {
+      "code": 1,
+      "meaning": "运行失败"
+    },
+    {
+      "code": 2,
+      "meaning": "用法或参数错误"
+    },
+    {
+      "code": 3,
+      "meaning": "运行时文件不完整或校验值不符"
+    },
+    {
+      "code": 4,
+      "meaning": "目标端口被占用"
+    },
+    {
+      "code": 6,
+      "meaning": "跨版本启动前备份失败（已中止）"
+    }
+  ]
+}
