@@ -1,3 +1,4 @@
+import type { Transport } from './envelope.js'
 import type {
   ContractDirection,
   ContractRow,
@@ -72,8 +73,12 @@ export interface WriteOptions {
   actor: string
   command: string
   idempotencyKey: string
+  /** SHA-256(canonical JSON input)；同一幂等键不同指纹视为误用。 */
+  inputFingerprint: string
   expectedVersion?: number
   dryRun?: boolean
+  /** 审计来源通道；内部调用默认 internal。 */
+  transport?: Transport
 }
 
 /** 写事务内部产生的业务结果与字段级差异。 */

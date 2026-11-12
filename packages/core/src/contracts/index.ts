@@ -1,5 +1,6 @@
 export * from './api-shapes.js'
 export * from './envelope.js'
 export * from './error-codes.js'
+export * from './ledger-error.js'
 export * from './store-port.js'
 export * from './versioning.js'
