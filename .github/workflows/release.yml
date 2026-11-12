@@ -59,7 +59,10 @@ jobs:
           key: node-dist-${{ env.NODE_VERSION }}-win-x64
 
       - name: 安装依赖
-        run: npm ci
+        # --ignore-scripts 是必需的：better-sqlite3 的 tarball 里已带 prebuilds/*.node，
+        # 但包内还有 binding.gyp，npm 会默认跑 node-gyp rebuild → 要求本机有 Visual Studio。
+        # 跳过脚本后 esbuild 靠 @esbuild/win32-x64 可选依赖拿到二进制，不需要安装脚本。
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: 类型检查
         run: npm run typecheck

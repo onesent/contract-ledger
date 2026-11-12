@@ -3,8 +3,8 @@
   "references": [
     { "path": "./packages/core" },
     { "path": "./packages/storage-sqlite" },
-    { "path": "./packages/cli" },
     { "path": "./packages/server" },
+    { "path": "./packages/cli" },
     { "path": "./packages/mcp" }
   ]
 }
