@@ -19,13 +19,15 @@ export function yuanToCents(yuan) {
 
 /**
  * 整数分 → 元（保留 2 位）。
+ * 分是整数，除以 100 即精确到分；不可再乘 100（曾经的 ×100/÷100 写法会原值返回，
+ * 导致列表与详情把 38,400.00 显示成 3,840,000.00）。
  * @param {unknown} cents
  * @returns {number}
  */
 export function centsToYuan(cents) {
   const value = Number(cents)
   if (!Number.isFinite(value)) return 0
-  return Math.round((value + Number.EPSILON) * 100) / 100
+  return Math.round(value) / 100
 }
 
 /**
