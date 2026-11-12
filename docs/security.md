@@ -40,7 +40,7 @@
 
 ### 1.3 部署前提
 
-- 运行环境满足 `scripts/check-runtime.mjs` 的最低要求：Node.js ≥ 24.18.0，SQLite ≥ 3.51.3（规避 3.7.0 至 3.51.2 的 WAL checkpoint 并发损坏缺陷）。
+- 运行环境满足 `scripts/check-runtime.mjs` 的最低要求：Node.js ≥ 24.0.0（Node 24.x），SQLite ≥ 3.51.3（规避 3.7.0 至 3.51.2 的 WAL checkpoint 并发损坏缺陷）。
 - 所有写操作只通过命令端点（`POST /api/commands/:name`）执行；读端点与导出端点不修改业务数据。
 - 只读模式由 `AppOptions.readonly` 控制，可用导出的 `setReadonly(options, true)` 运行期切换；命令返回 `READONLY` 时服务也会自动进入只读。
 
@@ -53,7 +53,7 @@
 | T3 | agent 令牌泄漏 | 库中只存 SHA-256 哈希（`auth_tokens.secret_hash`），明文 `ldg_<tokenId>_<secret>` 仅在签发时返回一次；比较走 `timingSafeEqual`（`safeEqualHex`）；支持轮换（旧令牌立即吊销）与吊销（立即 401，不依赖缓存过期） | 受保护：`auth/tokens.test.ts`「签发的令牌格式为 ldg_<16 hex>_<secret>，库中只存哈希」「已吊销令牌返回 AUTH_INVALID；重复吊销返回 false」「过期令牌返回 AUTH_INVALID」；`auth-routes.test.ts`「创建、列出、轮换并吊销令牌」（轮换后旧令牌 401、新令牌 200） |
 | T4 | 浏览器会话泄漏 | 会话 secret 只在配对响应 Cookie 中出现一次，库中存哈希；吊销/登出立即生效；`revoke-all` 批量吊销当前主体全部会话 | 受保护：`auth/tokens.test.ts`「创建会话返回一次性 secret，库中只存哈希与到期时间」「吊销单个会话后立即失效」「revokeAllSessions 只吊销指定操作者的会话」；`auth-routes.test.ts`「登出后会话立即失效」「会话列表可读且 revoke-all 吊销当前主体全部会话」 |
 | T5 | 配对码暴力猜测 | 8 位、32 字符无歧义字母表（去 0/O/1/I），TTL 120 秒，单次使用（成功即烧毁），错误尝试上限 5 次后 `RATE_LIMITED` 并停止继续校验；HTTP 层对 `/api/auth/pair` 另加固定窗口限流 5 次/分钟（`rate-limit.ts` `PAIR_RATE_RULE`） | 受保护：`auth/pair-code.test.ts`「连续 5 次错误后返回 RATE_LIMITED，并停止继续校验」「成功校验一次后立即烧毁，第二次返回 PAIR_CODE_INVALID」「过期后返回 PAIR_CODE_INVALID」；`auth-routes.test.ts`「已使用的配对码再次提交返回 401 PAIR_CODE_INVALID」「配对接口超过窗口上限返回 429 并带 Retry-After」 |
-| T6 | 一般认证请求洪泛 | 除 `/api/health` 外全部 `/api/*` 走认证限流 30 次/分钟（`rate-limit.ts` `AUTH_RATE_RULE`，`guards.ts` `rateLimitGuard`），超限 `429 RATE_LIMITED` + `Retry-After` | 未自动化验证：现有测试只断言配对路由 5 次/分钟触发 429，没有针对一般认证 30 次/分钟窗口的用例。手工复现：连续对 `/api/auth/session` 发 31 次无凭证请求，预期第 31 次返回 429 且 `code=RATE_LIMITED`（见第 4.1 节脚本） |
+| T6 | 一般认证请求洪泛 | 除 `/api/health` 外全部 `/api/*` 走认证限流 30 次/分钟（`rate-limit.ts` `AUTH_RATE_RULE`，`guards.ts` `rateLimitGuard`）。限流位于认证之前（`app.ts` 中间件顺序），未认证/无效凭证请求同样计数；超限 `429 RATE_LIMITED` + `Retry-After` | 受保护：`middleware.test.ts`「未认证请求超过 30 次/分钟返回 429 RATE_LIMITED」；手工复现见第 4.1 节 |
 | T7 | SQL 注入 | 所有数据库访问经 better-sqlite3 `prepare(...)` 绑定参数或 Kysely 查询构造器，无用户输入拼接进 SQL 文本；列表 `search` 走 `LIKE` 绑定参数（`views.ts`），排序字段取白名单（`read-support.ts` `SORT_FIELDS`）；`ledger query` 仅允许 `SELECT/WITH/EXPLAIN` 单语句、强制 `PRAGMA query_only = ON` 兜底、行数上限默认 200 最大 1000（`cli/src/local/query.ts`） | 受保护：`packages/cli/test/e2e-full.test.ts`「query 拒绝写语句，允许 SELECT」（INSERT 返回 `QUERY_REJECTED`，退出码 1） |
 | T8 | XSS 导致会话/Cookie 被窃 | 服务对所有响应统一下发 `X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy: no-referrer`、`Cache-Control: no-store` 与严格 CSP `default-src 'none'; frame-ancestors 'none'; base-uri 'none'`（`app.ts` 基线安全头中间件）。前端仅经 API 取数，不在服务端拼接 HTML | 受保护：`middleware.test.ts`「成功与失败响应都包含 nosniff、CSP、禁止嵌入与 no-store」 |
 | T9 | 备份泄漏模型密钥 | 导出经 `sanitizeSettingsForExport` 递归剔除 `apiKey`、`baseUrl` 与 `ai.enabled`（`storage-sqlite/src/dataset-support.ts`）；导出端点与 CLI `export` 共用该净化 | 受保护：`dataset-routes.test.ts`「导出包含全部业务集合并剔除密钥字段」；`packages/cli/test/e2e-full.test.ts`「export 输出数据集且不包含 apiKey / baseUrl」 |
@@ -77,7 +77,7 @@
 
 ### 4.1 一般认证限流 30 次/分钟（T6）
 
-无单元测试覆盖该窗口。手工复现（服务默认端口 4517，需先构建：`npm run typecheck`）：
+自动化证据：`middleware.test.ts`「未认证请求超过 30 次/分钟返回 429 RATE_LIMITED」验证前 30 次为 401、第 31 次为 429。手工复现（服务默认端口 4517，需先构建：`npm run typecheck`）：
 
 ```bash
 node packages/server/dist/bin.js --data ./tmp-sec &

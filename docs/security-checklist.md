@@ -1,7 +1,7 @@
 # 本地服务安全清单（OpenSpec 8.5）
 
 验证日期：2026-11-12
-环境：Windows（win32 x64）、Node.js v24.18.0、SQLite ≥ 3.51.3、`@ledger/server` 本地构建产物
+环境：Windows（win32 x64）、Node.js v24.9.0（复验；初次记录为 v24.18.0）、SQLite ≥ 3.51.3、`@ledger/server` 本地构建产物
 手工验证地址：`http://127.0.0.1:4599`（临时数据目录，验证结束后已删除）
 自动化证据：`packages/server/test/` 与本次新增的 `test/integration/`
 
@@ -13,7 +13,7 @@
 | Host 白名单（DNS rebinding） | **PASS** | 手工 `curl -H 'Host: evil.example' /api/health` → `403` + `HOST_REJECTED`；`middleware.test.ts` → “伪造 Host 返回 403 HOST_REJECTED” |
 | Origin 精确匹配（协议 + 主机 + 端口） | **PASS** | `middleware.test.ts` → “其他本地端口的 Origin 写请求返回 403 ORIGIN_REJECTED”；手工写请求使用 `Origin: http://127.0.0.1:4599` → `200`，缺少/跨端口 Origin 被拒 |
 | CSRF 双提交（Cookie 写请求） | **PASS** | 手工配对下发 `ledger_csrf`；带 `X-CSRF-Token` → `200`；不带 → `403 ORIGIN_REJECTED`（detail 明确提示 CSRF）；`middleware.test.ts` → “Cookie 写请求缺少 CSRF 头返回 403”“Cookie 写请求携带正确 CSRF 头可执行” |
-| 认证/配对限流 | **PASS** | 手工连续错误配对：第 5、6 次 → `429`（此前一次成功配对已占用窗口份额）；`auth-routes.test.ts` → “配对接口超过窗口上限返回 429 并带 Retry-After” |
+| 认证/配对限流 | **PASS** | 手工连续错误配对：第 5、6 次 → `429`（此前一次成功配对已占用窗口份额）；`auth-routes.test.ts` → “配对接口超过窗口上限返回 429 并带 Retry-After”；一般认证限流 30 次/分钟由 `middleware.test.ts` → “未认证请求超过 30 次/分钟返回 429 RATE_LIMITED” 覆盖（限流已前移至认证之前） |
 | 令牌吊销立即生效 | **PASS** | 手工创建 `ldg_...` 令牌：吊销前 `/api/auth/sessions` → `200`；`DELETE /api/auth/tokens/<id>` → `200 {"revoked":true}`；吊销后同一 Bearer → `401 AUTH_INVALID`；`auth-routes.test.ts` → “创建、列出、轮换并吊销令牌” |
 | `X-Content-Type-Options: nosniff` | **PASS** | 手工响应头（`curl -D - -o /dev/null /api/health`）含 `x-content-type-options: nosniff`；401 响应同样含该头。`middleware.test.ts` → “成功与失败响应都包含 nosniff、CSP、禁止嵌入与 no-store” |
 | CSP | **PASS（基线策略）** | 手工响应头含 `content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'`，同时带 `x-frame-options: DENY`、`referrer-policy: no-referrer`、`cache-control: no-store`；`middleware.test.ts` → “成功与失败响应都包含 nosniff、CSP、禁止嵌入与 no-store” |

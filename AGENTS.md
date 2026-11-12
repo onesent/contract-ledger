@@ -53,7 +53,7 @@
 
 - 双凭证平面：浏览器 `HttpOnly; SameSite=Strict` 会话 Cookie（`ledger_sid`）+ 可读 CSRF Cookie（`ledger_csrf`）；agent 用 `ldg_<tokenId>_<secret>` bearer 令牌。
 - 秘密只在签发/配对时明文出现一次，库中只存 SHA-256 哈希；比较用 `timingSafeEqual`（`safeEqualHex` / `constantTimeEqual`），禁止 `===` 比哈希。
-- 中间件顺序固定（`server/src/app.ts`）：Host 白名单 → Cookie 写请求精确 Origin → 认证 → Cookie 写请求 CSRF 双提交 → 限流 → 业务。Bearer 请求免 Origin/CSRF（无环境凭证）。
+- 中间件顺序固定（`server/src/app.ts`）：Host 白名单 → Cookie 写请求精确 Origin → 限流 → 认证 → Cookie 写请求 CSRF 双提交 → 业务。Bearer 请求免 Origin/CSRF（无环境凭证）；限流必须先于认证，否则未认证的暴力尝试在计数前就被 401 短路。
 - Cookie 不按端口隔离（RFC 6265 §8.5），故 CSRF 不能只靠 SameSite，必须精确 Origin + 双提交。
 - 配对码：8 位、32 字符无歧义字母表、TTL 120 秒、单次使用、错误上限 5；HTTP 配对限流 5 次/分钟，一般认证限流 30 次/分钟。
 - 只认证不授权：任意已认证主体能力相同，差异只体现在审计 `actor`。
