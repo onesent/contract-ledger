@@ -11,6 +11,9 @@
       "import": "./dist/index.js"
     }
   },
+  "scripts": {
+    "test": "vitest run --root ../.. packages/server"
+  },
   "dependencies": {
     "@hono/node-server": "2.1.7",
     "@ledger/core": "*",
