@@ -1,5 +1,10 @@
 /**
- * @ledger/core 公共入口：领域契约、命令定义与派生逻辑的唯一出口。
- * Wave 1 仅冻结跨包共享契约，领域 schema / 命令实现留待后续波次。
+ * @ledger/core 公共入口：领域契约、schema、金额、不变量、派生查询与能力描述的唯一出口。
+ * Wave 1 冻结跨包共享契约；Wave 2A 增加领域内核。
  */
 export * from './contracts/index.js'
+export * from './describe.js'
+export * from './invariants.js'
+export * from './money.js'
+export * from './queries/derive.js'
+export * from './schema/index.js'
