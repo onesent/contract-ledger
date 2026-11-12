@@ -1,30 +1,27 @@
+import { randomUUID } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import type {
-  ContractRow,
-  DeliveryRow,
-  DictCategoryRow,
-  DictItemRow,
-  PaymentRow,
-  PersonnelRow,
-} from '@ledger/core'
+import { LedgerError, type WriteOptions } from '@ledger/core'
 import {
   SqliteContractRepository,
   SqliteDeliveryRepository,
   SqliteDictRepository,
   SqlitePaymentRepository,
   SqlitePersonnelRepository,
+  createLedgerStore,
   createRepoRuntime,
   defaultMigrationsDir,
   migrateDatabase,
   openDatabase,
   type Database,
   type RepoRuntime,
+  type SqliteLedgerStore,
 } from '../src/index.js'
+import { category, dictItem } from './fixtures.js'
 
-/** 测试固定时间戳。 */
-export const NOW = '2026-01-01T00:00:00.000Z'
+// 工厂函数保持在 fixtures.ts，helpers.ts 继续对外暴露，测试可直接从任一处导入。
+export * from './fixtures.js'
 
 /** 每个测试独立的临时库上下文。 */
 export interface TestContext {
@@ -32,6 +29,7 @@ export interface TestContext {
   file: string
   db: Database
   runtime: RepoRuntime
+  store: SqliteLedgerStore
   contracts: SqliteContractRepository
   payments: SqlitePaymentRepository
   deliveries: SqliteDeliveryRepository
@@ -49,16 +47,20 @@ export async function createTestContext(): Promise<TestContext> {
   const db = openDatabase({ file })
   await migrateDatabase(db, { migrationsDir: defaultMigrationsDir(), backupDir: path.join(dir, 'backups') })
   const runtime = createRepoRuntime(db)
-  return {
-    dir,
-    file,
-    db,
-    runtime,
+  const repos = {
     contracts: new SqliteContractRepository(runtime),
     payments: new SqlitePaymentRepository(runtime),
     deliveries: new SqliteDeliveryRepository(runtime),
     personnel: new SqlitePersonnelRepository(runtime),
     dicts: new SqliteDictRepository(runtime),
+  }
+  return {
+    dir,
+    file,
+    db,
+    runtime,
+    store: createLedgerStore(db, repos),
+    ...repos,
   }
 }
 
@@ -66,34 +68,6 @@ export async function createTestContext(): Promise<TestContext> {
 export function disposeContext(ctx: TestContext): void {
   if (ctx.db.open) ctx.db.close()
   rmSync(ctx.dir, { recursive: true, force: true })
-}
-
-/** 字典分类工厂。 */
-export function category(id: string, code: string, name: string, sort = 0): DictCategoryRow {
-  return { id, code, name, builtin: true, sort, createdAt: NOW, updatedAt: NOW }
-}
-
-/** 字典项工厂。 */
-export function dictItem(
-  id: string,
-  categoryCode: string,
-  code: string,
-  name: string,
-  sort = 0,
-): DictItemRow {
-  return {
-    id,
-    categoryCode,
-    code,
-    name,
-    color: '',
-    sort,
-    enabled: true,
-    builtin: false,
-    note: '',
-    createdAt: NOW,
-    updatedAt: NOW,
-  }
 }
 
 /** 插入测试所需的基础字典：合同类型、合同状态、付款方式、部门。 */
@@ -109,97 +83,6 @@ export function seedDicts(ctx: TestContext): void {
   ctx.dicts.insertItem(dictItem('item-pay-transfer', 'payMethod', 'transfer', '银行转账', 10))
   ctx.dicts.insertItem(dictItem('item-dept-sales', 'department', 'sales', '销售部', 10))
   ctx.dicts.insertItem(dictItem('item-dept-delivery', 'department', 'delivery', '交付部', 20))
-}
-
-/** 人员工厂。 */
-export function personnelRow(overrides: Partial<PersonnelRow> = {}): PersonnelRow {
-  return {
-    id: 'person-1',
-    code: 'YG-001',
-    name: '张伟',
-    deptCode: 'sales',
-    deptName: '',
-    position: '销售经理',
-    phone: '13800000001',
-    email: 'zhangwei@example.com',
-    active: true,
-    hireDate: '2021-03-01',
-    note: '',
-    createdAt: NOW,
-    updatedAt: NOW,
-    ...overrides,
-  }
-}
-
-/** 合同工厂：派生字段由视图计算，插入前填 0 占位。 */
-export function contractRow(overrides: Partial<ContractRow> = {}): ContractRow {
-  return {
-    id: 'contract-1',
-    no: 'HT-001',
-    projectName: '示例项目',
-    direction: 'sale',
-    counterparty: '示例客户',
-    typeItemId: 'item-type-sales',
-    typeCode: 'sales',
-    typeName: '销售合同',
-    statusItemId: 'item-status-executing',
-    statusCode: 'executing',
-    statusName: '执行中',
-    amountCents: 10000,
-    openingPaidCents: 0,
-    paidCents: 0,
-    unpaidCents: 10000,
-    receivedAmountCents: 0,
-    openingDeliveredCents: 0,
-    deliveredCents: 0,
-    lastDeliveryDate: null,
-    fundingPercent: 0,
-    deliveryPercent: 0,
-    executionGapCents: 0,
-    gapState: 'none',
-    ownerId: null,
-    ownerName: '',
-    note: '',
-    signDate: '2026-01-01',
-    startDate: '2026-01-01',
-    dueDate: '2026-12-31',
-    statusChangedAt: null,
-    createdAt: NOW,
-    updatedAt: NOW,
-    ...overrides,
-  }
-}
-
-/** 资金流水工厂。 */
-export function paymentRow(overrides: Partial<PaymentRow> = {}): PaymentRow {
-  return {
-    id: 'payment-1',
-    contractId: 'contract-1',
-    date: '2026-02-01',
-    amountCents: 1000,
-    methodCode: 'transfer',
-    note: '',
-    createdAt: NOW,
-    updatedAt: NOW,
-    ...overrides,
-  }
-}
-
-/** 交付明细工厂。 */
-export function deliveryRow(overrides: Partial<DeliveryRow> = {}): DeliveryRow {
-  return {
-    id: 'delivery-1',
-    contractId: 'contract-1',
-    date: '2026-03-01',
-    amountCents: 1000,
-    quantity: null,
-    unit: '',
-    status: 'delivered',
-    note: '',
-    createdAt: NOW,
-    updatedAt: NOW,
-    ...overrides,
-  }
 }
 
 /** 读取视图行的原始对象（测试断言派生列）。 */
@@ -251,4 +134,43 @@ export function expectThrowMessage(fn: () => void, fragment: string): void {
   if (!message.includes(fragment)) {
     throw new Error(`预期错误包含「${fragment}」，实际为「${message}」`)
   }
+}
+
+/** 生成写事务选项；默认值便于测试聚焦单个维度。 */
+export function writeOptions(overrides: Partial<WriteOptions> = {}): WriteOptions {
+  return {
+    actor: 'tester',
+    command: 'test.command',
+    idempotencyKey: randomUUID(),
+    inputFingerprint: 'fingerprint-1',
+    transport: 'internal',
+    ...overrides,
+  }
+}
+
+/** 执行并捕获 LedgerError；非领域错误原样抛出。 */
+export async function captureLedgerError(fn: () => Promise<unknown>): Promise<LedgerError> {
+  try {
+    await fn()
+  } catch (error) {
+    if (error instanceof LedgerError) return error
+    throw error
+  }
+  throw new Error('预期抛出 LedgerError，但未抛出')
+}
+
+/** 可计数的表名（测试内部使用，不接受任意字符串）。 */
+export type CountableTable =
+  | 'contracts'
+  | 'payments'
+  | 'deliveries'
+  | 'personnel'
+  | 'dict_items'
+  | 'audit_log'
+  | 'idempotency_keys'
+
+/** 读取表行数。 */
+export function countTable(db: Database, table: CountableTable): number {
+  const row = db.prepare<[], { total: number }>(`SELECT COUNT(*) AS total FROM ${table}`).get()
+  return row ? row.total : 0
 }

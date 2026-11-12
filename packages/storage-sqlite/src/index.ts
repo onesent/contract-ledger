@@ -1,8 +1,8 @@
 /**
  * @ledger/storage-sqlite 公共入口。
  *
- * 暴露数据库连接、迁移运行器、Kysely 类型、仓储与合同视图读取层。
- * 写事务、幂等重放、审计与备份服务属于后续任务（3.4–3.6），不在本入口实现。
+ * 暴露数据库连接、迁移运行器、Kysely 类型、仓储、合同视图读取层、
+ * 版本化写事务（幂等 + 审计）与备份/恢复工具。
  */
 
 // 数据库连接与 PRAGMA
@@ -18,6 +18,21 @@ export {
   vacuumInto,
 } from './migrate.js'
 export type { MigrateOptions, MigrateResult } from './migrate.js'
+
+// 版本化写事务（幂等 + 审计）
+export { SqliteLedgerStore, auditRows, createLedgerStore, readDatasetVersion } from './store.js'
+export type { AuditRow, LedgerRepositories } from './store.js'
+
+// 备份与恢复
+export { backupDatabase, restoreBackup, verifyBackup } from './backup.js'
+export type {
+  BackupCounts,
+  BackupOptions,
+  BackupResult,
+  BackupVerification,
+  RestoreOptions,
+  RestoreResult,
+} from './backup.js'
 
 // Kysely 与仓储运行时
 export { createKysely, createRepoRuntime } from './kysely.js'
