@@ -48,9 +48,9 @@
 
 ## 6. MCP 与能力发现
 
-- [ ] 6.1 实现 stdio MCP server：由命令注册表生成 `tools/list`，带 annotations、`inputSchema`/`outputSchema` 与 `structuredContent`；测试断言工具数量、注解与注册表一致
-- [ ] 6.2 增加协议版本开关：默认 v2（2026-07-28），`--legacy` 使用 v1 SDK；用 MCP Inspector 或裸 stdio 脚本各跑一次 `tools/list` 与一次调用
-- [ ] 6.3 生成发现产物：`schema/commands.json`、`AGENTS.md` 片段、`llms.txt`；测试断言 `describe` 输出与 JSON 文件内容一致
+- [x] 6.1 实现 stdio MCP server：由命令注册表生成 `tools/list`，带 annotations、`inputSchema`/`outputSchema` 与 `structuredContent`；测试断言工具数量、注解与注册表一致
+- [x] 6.2 增加协议版本开关：默认 v2（2026-07-28），`--legacy` 使用 v1 SDK；用 MCP Inspector 或裸 stdio 脚本各跑一次 `tools/list` 与一次调用
+- [x] 6.3 生成发现产物：`schema/commands.json`、`AGENTS.md` 片段、`llms.txt`；测试断言 `describe` 输出与 JSON 文件内容一致
 - [ ] 6.4 在 `docs/mcp-compat.md` 记录 Claude Code / Codex / Cursor 的握手与调用结果；按文档步骤复跑一次，结果与记录一致
 
 ## 7. 前端迁移
