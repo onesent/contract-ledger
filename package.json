@@ -2,6 +2,7 @@
   "name": "contract-ledger-workbench",
   "version": "1.0.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "合同管理台账：本地服务 + SQLite + CLI + MCP + Vue 前端（npm workspaces monorepo）",
   "engines": {
@@ -18,9 +19,12 @@
     "test": "vitest run",
     "test:integration": "vitest run test/integration",
     "validate": "node scripts/check-runtime.mjs && tsc -b --pretty false && vitest run",
+    "spec:launcher": "node scripts/gen-launcher-spec.mjs",
     "package:payload": "node scripts/package-payload.mjs",
     "package:exe": "node scripts/build-launcher.mjs",
-    "package": "npm run typecheck && npm run build && npm run package:payload && npm run package:exe"
+    "package:channels": "node scripts/channels.mjs",
+    "release:guard": "node scripts/release-guard.mjs",
+    "package": "npm run typecheck && npm run build && npm run package:payload && npm run package:exe && npm run package:channels"
   },
   "devDependencies": {
     "@types/better-sqlite3": "9.6.0",

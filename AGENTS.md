@@ -89,6 +89,28 @@ npm run build -w @ledger/mcp
 npm run discovery -w @ledger/mcp
 ```
 
+重新生成启动器命令面快照（改 `launcher` 子命令/选项后必跑）：
+
+```bash
+npm run spec:launcher     # launcher/spec.go → launcher/spec.json
+npm run package:channels  # 由 release 产物生成 channels/（winget 清单 + 渠道快照）
+npm run release:guard     # 校验 tag / 版本 / zip / SHA256SUMS / 渠道清单互相对齐
+```
+
+文档与功能的一致性由测试守护，不靠人工核对（防「功能改了文档没改」的漂移）：
+
+| 漂移面 | 权威来源 | 守护测试 |
+| --- | --- | --- |
+| 领域命令 / schema / 错误码 | `packages/core` 注册表 | `packages/mcp/test/discovery.test.ts` |
+| 启动器子命令 / 选项 / 退出码 | `launcher/spec.go` | `launcher/spec_test.go`（代码 ↔ `launcher/spec.json`）+ `scripts/docs-drift.test.mjs`（快照 ↔ README / docs） |
+| 分发包内 README.txt | `docs/distribution-readme.txt`（`{{version}}` 占位） | `scripts/docs-drift.test.mjs` |
+| 分发渠道清单（URL / sha256 / winget 字段） | `scripts/channels.mjs` 的生成物（`channels/`） | `scripts/channels-drift.test.mjs` + `scripts/release-guard.mjs`（产物 ↔ 清单 ↔ 文档 ↔ 工作流） |
+| 认证与中间件断言 | `server/src/app.ts` | `packages/server/test/middleware.test.ts` + `docs/security.md` |
+
+`ledger.exe help` 也由 `launcher/spec.go` 渲染，因此帮助文本不会与实现分叉。
+
+发布走 GitHub Actions（`.github/workflows/release.yml`）：推 `v*` tag 后重跑与本地相同的链（typecheck → test → build → 出包 → 生成渠道清单 → 发版守卫 → 冒烟）并创建 GitHub Release；Gitee Release 手工上传同一批字节作为镜像。渠道只负责托管，运行期仍然零外部网络请求。
+
 运行：
 
 ```bash
@@ -104,6 +126,7 @@ node packages/mcp/dist/bin.js --db ./data/ledger.db          # MCP stdio（--leg
 - 改认证/中间件：`docs/security.md` 的每条受保护断言仍有测试。
 - 涉及导入导出：v2 fixture 导入后 `validate` 业务 `violations` 为空、记录数一致。
 - 前端相关：`npm run build -w @ledger/web` 与 `npx vitest run packages/web` 通过；手工冒烟首页/合同/人员/字典/设置经 API 加载无报错，375px 与桌面无横向溢出。
+- 改出包/发版相关：`npm run package` 后 `node scripts/release-guard.mjs --tag v<version>` 通过，`channels/` 已重新生成并提交。
 
 ## 8. Git
 

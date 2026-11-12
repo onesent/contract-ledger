@@ -135,3 +135,33 @@ func TestConfigRoundTrip(t *testing.T) {
 		t.Fatal("非默认数据目录应写入配置")
 	}
 }
+
+// TestResolveExeDir 覆盖入口目录解析：普通路径取目录，符号链接（包管理器安装方式）取真实目录。
+func TestResolveExeDir(t *testing.T) {
+	if got := resolveExeDir(""); got != "" {
+		t.Fatalf("空路径应返回空串，得到 %q", got)
+	}
+
+	root := t.TempDir()
+	appDir := filepath.Join(root, "app")
+	if err := os.MkdirAll(appDir, 0o755); err != nil {
+		t.Fatalf("建目录失败：%v", err)
+	}
+	real := filepath.Join(appDir, "ledger.exe")
+	if err := os.WriteFile(real, []byte("stub"), 0o644); err != nil {
+		t.Fatalf("写文件失败：%v", err)
+	}
+	if got := resolveExeDir(real); !samePath(got, appDir) {
+		t.Fatalf("普通路径解析失败：%s，期望 %s", got, appDir)
+	}
+
+	// winget / Scoop 这类安装方式会把 exe 以链接形式暴露在别处：
+	// 必须解析回真实目录，否则同目录的 node.exe / VERSION 找不到。
+	link := filepath.Join(root, "ledger-link.exe")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("无法创建符号链接（Windows 需开发者模式或管理员权限）：%v", err)
+	}
+	if got := resolveExeDir(link); !samePath(got, appDir) {
+		t.Fatalf("符号链接未解析：%s，期望 %s", got, appDir)
+	}
+}

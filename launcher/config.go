@@ -18,10 +18,26 @@ type launcherConfig struct {
 }
 
 // exeDir 返回可执行文件所在目录；失败返回空串。
+//
+// 解析符号链接是必需的：包管理器（winget 的 portable/ZIP 安装、Scoop 的 symlink 模式）
+// 与手工建的快捷方式会把 exe 暴露成链接，未解析时会在链接所在目录里找不到同目录的
+// node.exe / VERSION / node_modules，误报「运行时文件不完整」。
 func exeDir() string {
 	exe, err := os.Executable()
 	if err != nil {
 		return ""
+	}
+	return resolveExeDir(exe)
+}
+
+// resolveExeDir 解析可执行文件路径中的符号链接并返回其所在目录（拆出来便于测试）。
+// 解析失败（如路径不存在）时退回原路径的目录，行为与旧实现一致。
+func resolveExeDir(exe string) string {
+	if exe == "" {
+		return ""
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil && resolved != "" {
+		exe = resolved
 	}
 	return filepath.Dir(exe)
 }

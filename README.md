@@ -18,6 +18,16 @@
 
 不需要安装 Node、不需要任何安装步骤：下载一个 zip，解压后双击 `ledger.exe` 即可。
 
+下载与安装渠道：
+
+| 渠道 | 方式 |
+| --- | --- |
+| **GitHub Releases（主）** | <https://github.com/onesent/contract-ledger/releases> |
+| Gitee Release（镜像） | <https://gitee.com/sentone/contract-ledger/releases>，同一份产物、同一校验值 |
+| winget | `winget install Onesent.Ledger`（安装后 `ledger` 即入口；数据仍在 `%LOCALAPPDATA%\ledger`） |
+
+每次发版只发一个文件 + 校验值：
+
 ```text
 ledger-<version>-win-x64.zip   唯一交付物：解压即得自包含程序目录
 ledger-<version>-win-x64.zip.sha256   校验值
@@ -39,9 +49,9 @@ ledger.exe cli <args...>        # 转发到 CLI（透传退出码）
 
 首次启动会弹出一次性配对码（120 秒有效），在页面输入即可完成配对。
 
-- **升级**：新版本 zip 解压到新目录 → 旧目录 `ledger.exe stop` → 新目录 `ledger.exe`。跨版本启动会自动备份数据库到 `data\backups\upgrade-<旧版本>-<时间戳>.db`，旧目录保留可回滚。
+- **升级**：新版本 zip 解压到新目录 → 旧目录 `ledger.exe stop` → 新目录 `ledger.exe`；用 winget 装的则 `winget upgrade Onesent.Ledger`。跨版本启动会自动备份数据库到 `data\backups\upgrade-<旧版本>-<时间戳>.db`，旧目录保留可回滚。
 - **回滚**：用旧目录的 `ledger.exe` 启动；需要旧数据时用备份覆盖 `ledger.db` 并删 `-wal`/`-shm`。
-- **卸载**：`ledger.exe stop` 后直接删程序目录；需要时再删 `%LOCALAPPDATA%\ledger`。
+- **卸载**：`ledger.exe stop` 后直接删程序目录（或 `winget uninstall Onesent.Ledger`）；需要时再删 `%LOCALAPPDATA%\ledger`。
 
 完整说明见 [`docs/distribution.md`](docs/distribution.md)。
 

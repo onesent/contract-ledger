@@ -1,0 +1,21 @@
+# 由 scripts/channels.mjs 从已发布的分发包生成，请勿手改（改生成器）。
+PackageIdentifier: Onesent.Ledger
+PackageVersion: 1.0.0
+PackageLocale: en-US
+Publisher: Onesent
+PublisherUrl: https://github.com/onesent/contract-ledger
+PackageName: Ledger
+PackageUrl: https://github.com/onesent/contract-ledger
+License: MIT
+LicenseUrl: https://github.com/onesent/contract-ledger/blob/main/LICENSE
+ShortDescription: Offline contract ledger: local service + SQLite + CLI + MCP + Vue UI.
+Description: A local-first contract ledger. The program is a self-contained directory (bundled Node runtime, SQLite, CLI, MCP server and web UI); business data lives in %LOCALAPPDATA%\ledger and is never uploaded. No admin rights required.
+Tags:
+  - contract
+  - ledger
+  - sqlite
+  - offline
+  - cli
+ReleaseNotesUrl: https://github.com/onesent/contract-ledger/releases/tag/v1.0.0
+ManifestType: defaultLocale
+ManifestVersion: 1.10.0

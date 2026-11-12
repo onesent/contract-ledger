@@ -1,0 +1,158 @@
+name: release
+
+# 发版即发布：推送 v* tag（或手动 workflow_dispatch 指定版本）→ 本地同一条命令链
+# （typecheck → test → build → payload → exe → channels → guard）→ GitHub Release。
+#
+# 产物与本地 `npm run package` 完全一致：`ledger-<version>-win-x64.zip` + `.sha256` +
+# `SHA256SUMS` + winget 清单包，全部作为 Release 附件，同时留一份 workflow artifact 便于审计。
+# Gitee 仍是同一份产物的镜像（手工上传同样四个文件，sha256 不变）。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 要发布的版本号（不含 v，必须已写在 package.json 里）
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # 与分发包内置的 node.exe 版本绑定：package-payload 用当前运行时版本去取官方分发，
+  # 版本漂了会让本地与 CI 的分发包不一致（sha256 也就对不上）。
+  NODE_VERSION: 24.9.0
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: 检出源码（完整历史：构建时间戳取自 commit 时间）
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 安装 Node（分发包内置的运行时版本）
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: 安装 Go（启动器）
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: launcher/go.mod
+
+      - name: 缓存 node.exe 官方分发（避免每次发版重下 36MB）
+        uses: actions/cache@v4
+        with:
+          path: build/.cache
+          key: node-dist-${{ env.NODE_VERSION }}-win-x64
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 类型检查
+        run: npm run typecheck
+
+      - name: 单元 / 集成测试
+        run: npm test
+
+      - name: 构建（后端 dist + 前端产物）
+        run: npm run build
+
+      - name: 组装载荷（node.exe + node_modules + 迁移 + 前端）
+        run: npm run package:payload
+
+      - name: 构建启动器并打分发 zip
+        run: npm run package:exe
+
+      - name: 解析版本号（tag → 版本）
+        shell: pwsh
+        env:
+          TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
+        run: |
+          $version = node -p "require('./package.json').version"
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TAG_NAME=$env:TAG_NAME" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: 生成渠道清单（winget / 渠道快照）
+        run: npm run package:channels
+
+      - name: 发版守卫（tag / 版本 / zip / SHA256SUMS / 渠道清单互相对齐）
+        run: node scripts/release-guard.mjs --tag "$env:TAG_NAME"
+
+      - name: 冒烟（解压后入口能跑起来）
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'smoke'
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          tar.exe -xf "release/ledger-$env:VERSION-win-x64.zip" -C $dir
+          $exe = Join-Path $dir "ledger-$env:VERSION-win-x64/ledger.exe"
+          $reported = & $exe --version
+          if ($reported -notmatch [regex]::Escape($env:VERSION)) {
+            throw "解压后的 ledger.exe --version 报 $reported，未包含 $env:VERSION"
+          }
+          & $exe help | Out-Null
+
+      - name: 打包 winget 清单（作为 Release 附件，供 winget-pkgs PR 使用）
+        shell: pwsh
+        run: |
+          $src = "channels/winget/manifests/o/Onesent/Ledger/$env:VERSION/*.yaml"
+          Compress-Archive -Path $src -DestinationPath "release/ledger-$env:VERSION-winget-manifests.zip" -Force
+
+      - name: 保留一份 workflow artifact（审计用，非发布渠道）
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger-${{ env.VERSION }}-win-x64
+          path: |
+            release/ledger-${{ env.VERSION }}-win-x64.zip
+            release/ledger-${{ env.VERSION }}-win-x64.zip.sha256
+            release/ledger-${{ env.VERSION }}-winget-manifests.zip
+            release/SHA256SUMS
+            channels/channels.json
+          if-no-files-found: error
+
+      - name: 发布 GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assets = @(
+            "release/ledger-$env:VERSION-win-x64.zip",
+            "release/ledger-$env:VERSION-win-x64.zip.sha256",
+            "release/ledger-$env:VERSION-winget-manifests.zip",
+            "release/SHA256SUMS"
+          )
+          gh release view "$env:TAG_NAME" 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            # 重跑（workflow_dispatch 补发）时覆盖同名资产，避免「release 已存在」直接失败。
+            gh release upload "$env:TAG_NAME" @assets --clobber
+          } else {
+            gh release create "$env:TAG_NAME" @assets --verify-tag --generate-notes --title "v$env:VERSION"
+          }
+
+      - name: 总结（下载地址与校验值）
+        shell: pwsh
+        run: |
+          $sha = (Get-Content "release/SHA256SUMS" -Raw).Split()[0]
+          $url = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/releases/download/$env:TAG_NAME/ledger-$env:VERSION-win-x64.zip"
+          $template = @'
+          ### 已发布 v{0}
+
+          | 项目 | 值 |
+          | --- | --- |
+          | 下载 | {1} |
+          | sha256 | {2} |
+          | 安装 | 解压后双击 ledger.exe；或 winget install Onesent.Ledger |
+
+          Gitee 镜像：上传同一 zip / .sha256 / SHA256SUMS / -winget-manifests.zip（sha256 不变）。
+          '@
+          $template -f $env:VERSION, $url, $sha | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8

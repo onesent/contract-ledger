@@ -4,13 +4,22 @@
 
 ## 1. 交付物
 
-只有一个文件：
+每次发版只发一个可执行包：
 
 | 文件 | 说明 |
 | --- | --- |
-| `ledger-<version>-win-x64.zip` | **分发包**（上传 Gitee Release 附件）。解压即得一个自包含目录 |
+| `ledger-<version>-win-x64.zip` | **分发包**。解压即得一个自包含目录 |
 | `ledger-<version>-win-x64.zip.sha256` | 分发包校验值 |
 | `SHA256SUMS` | 校验清单（当前只列分发包一行） |
+| `ledger-<version>-winget-manifests.zip` | winget 清单（`channels/winget/**` 的打包，供 winget-pkgs PR 使用） |
+
+发布渠道：
+
+| 渠道 | 地址 | 说明 |
+| --- | --- | --- |
+| **GitHub Releases（主）** | `https://github.com/onesent/contract-ledger/releases` | 由 `.github/workflows/release.yml` 在 tag 推送时自动构建并发布 |
+| Gitee Release（镜像） | `https://gitee.com/sentone/contract-ledger/releases` | 手工上传**同一份**产物，sha256 不变（不重新打包） |
+| winget | `winget install Onesent.Ledger` | `InstallerUrl` 指向 GitHub Release 资产；清单见 §8 |
 
 解压后：
 
@@ -32,7 +41,7 @@ ledger-<version>-win-x64\
 
 ## 2. 首次使用
 
-1. 解压分发包到任意可写目录。
+1. 从 GitHub Releases 下载分发包（`https://github.com/onesent/contract-ledger/releases/download/v<version>/ledger-<version>-win-x64.zip`；大陆网络可用 Gitee 镜像的同一文件），解压到任意可写目录。
 2. 双击 `ledger.exe`：启动本地服务并打开浏览器。
 3. 未配对时会弹出**一次性配对码**（120 秒有效）；在页面输入即可完成配对。过期则执行 `ledger.exe stop` 后重新双击。
 
@@ -160,11 +169,61 @@ rmdir /s /q "%LOCALAPPDATA%\ledger"
 - 若在程序目录内执行 `rmdir`，Windows 会因「目录是当前工作目录」而失败：先 `cd` 到别处再删。
 - 服务是独立后台进程，`stop` 之前直接删目录会导致进程残留（文件被占用），请先停服。
 
-## 8. 发版清单（发版人）
+## 8. 安装渠道与 winget 清单
+
+渠道只是**托管**，不改运行期行为：程序仍是一个自包含目录，运行期零外部网络请求（`AGENTS.md` §3.4）。升级语义仍是「换一个程序目录 + 跨版本启动时自动备份数据库」。
+
+### 8.1 GitHub Releases（主渠道）
+
+推 `v*` tag 触发 `.github/workflows/release.yml`，在 `windows-latest` 上重跑本地同一条命令链：
+
+```text
+npm ci → typecheck → test → build → package:payload → package:exe
+       → package:channels → release-guard → 冒烟(解压后跑 --version/help) → gh release create
+```
+
+产物：`ledger-<version>-win-x64.zip`、`.sha256`、`SHA256SUMS`、`ledger-<version>-winget-manifests.zip`。断网或工作流失效时可 `workflow_dispatch` 指定版本重跑；也可本地 `npm run package` 后手工 upload。
+
+### 8.2 Gitee 镜像
+
+把 GitHub Release 的**同一批文件**上传到 Gitee Release（标题同为 `v<version>`）。不要重新打包：镜像的意义是同一个 sha256，用户在哪边下都能用 `SHA256SUMS` 校验。
+
+### 8.3 winget
+
+清单由 `npm run package:channels` 从真实分发包生成（`channels/channels.json` + `channels/winget/manifests/**`），字段间的一致性由 `scripts/channels-drift.test.mjs` 与 `scripts/release-guard.mjs` 守护。
+
+```yaml
+InstallerType: zip                 # 整个归档解压到包目录
+NestedInstallerType: portable      # 再为嵌套 exe 建命令别名 ledger
+NestedInstallerFiles:
+  - RelativeFilePath: 'ledger-<version>-win-x64\ledger.exe'
+    PortableCommandAlias: ledger
+Scope: user                        # 数据在 %LOCALAPPDATA%\ledger，不需要管理员权限
+```
+
+提交/更新：
+
+```bash
+winget install Microsoft.WingetCreate
+wingetcreate update Onesent.Ledger --version <version> \
+  --urls https://github.com/onesent/contract-ledger/releases/download/v<version>/ledger-<version>-win-x64.zip
+```
+
+要点：
+
+- **符号链接安装**：winget 只给 exe 建链接，链接落在 `%LOCALAPPDATA%\Microsoft\WinGet\Links`。启动器的 `exeDir()` 会解析符号链接（`launcher/config.go` 的 `resolveExeDir`），否则会去链接所在目录找 `node.exe` 而误报「运行时文件不完整」。
+- **升级**：`winget upgrade Onesent.Ledger` 换掉程序目录；新版本首次启动按 `VERSION` 差异自动备份数据库。
+- **卸载**：`winget uninstall Onesent.Ledger` 只删程序，`%LOCALAPPDATA%\ledger` 保留；要清数据需手工删。
+- **审核**：winget-pkgs 是人工审核 + 干净机校验，`InstallerUrl` 必须匿名可达。未签名的 `ledger.exe` + 内置 `node.exe` 可能被静态扫描误报，正式提交前建议先做 Authenticode 签名。
+
+## 9. 发版清单（发版人）
 
 1. `npm run validate` 全绿。
-2. `npm run package`：产出 `build/dist/ledger-<version>-win-x64/`（可运行目录，排障用）与 `release/ledger-<version>-win-x64.zip`。
-3. 校验：`cd release && sha256sum -c SHA256SUMS`。
-4. 冒烟：解压 zip 到干净目录 → `ledger.exe --version` → 双击/`start` → 配对 → 建合同 → `stop` → 解压上一版 zip 到并列目录并用它启动，确认自动生成 `data\backups\upgrade-*.db` 且数据完整。
-5. 上传 Gitee Release：标题带版本号（`vX.Y.Z`），附件为 `ledger-<version>-win-x64.zip` 与 `.sha256`，正文写变更摘要与校验值。
-6. 分发包文件名带版本、`ledger.exe` 不带版本：升级即换目录，不需要改文件名。
+2. 改过启动器子命令/选项时先跑 `npm run spec:launcher`（刷新 `launcher/spec.json`），否则 `go test` 与文档漂移检查会失败。
+3. `npm run package`：产出 `build/dist/ledger-<version>-win-x64/`（可运行目录，排障用）、`release/ledger-<version>-win-x64.zip` 与渠道清单（`channels/`）；包内 `README.txt` 由 `docs/distribution-readme.txt` 渲染（`{{version}}` 占位）。
+4. `node scripts/release-guard.mjs --tag v<version>`：校验 tag / `package.json` 版本 / zip / `.sha256` / `SHA256SUMS` / `channels/channels.json` 互相对齐（CI 同一个脚本）。
+5. 冒烟：解压 zip 到干净目录 → `ledger.exe --version` → 双击/`start` → 配对 → 建合同 → `stop` → 解压上一版 zip 到并列目录并用它启动，确认自动生成 `data\backups\upgrade-*.db` 且数据完整。
+6. 提交并打 tag：`git commit` → `git tag -a v<version> -m "v<version>"` → `git push github master:main --follow-tags`（本地分支 `master`，GitHub 仓库默认分支是 `main`）与 `git push origin master --follow-tags`（Gitee 保留为镜像仓库）。**首次以源码覆盖 GitHub 仓库时**需 `--force-with-lease`（仓库建库时只有自动生成的 LICENSE，先把需要的文件带到本地）。
+7. GitHub Actions 自动出包并发布 Release；发布后在 Gitee Release 手工上传**同一批文件**（zip / `.sha256` / `SHA256SUMS` / `-winget-manifests.zip`）。
+8. winget：用 Release 附件里的清单提交 `wingetcreate submit`（首次）或 `wingetcreate update`（后续）。若 CI 产物的 sha256 与仓库内 `channels/` 不同，把 Release 附件的 `channels.json` 与清单回填提交，保持「仓库快照 = 已发布字节」。
+9. 分发包文件名带版本、`ledger.exe` 不带版本：升级即换目录，不需要改文件名。
