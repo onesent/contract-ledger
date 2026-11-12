@@ -214,6 +214,180 @@ function validatePayload(payload: unknown): { schemaVersion: DatasetSchemaVersio
   return { schemaVersion, data: datasetData }
 }
 
+/** 业务日期（YYYY-MM-DD）且为真实日历日期。 */
+function isBusinessDate(value: unknown): boolean {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const parsed = new Date(`${value}T00:00:00.000Z`)
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+}
+
+/** ISO-8601 时间戳（必须带时区偏移或 Z）。 */
+function isIsoTimestampText(value: unknown): boolean {
+  if (typeof value !== 'string') return false
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) {
+    return false
+  }
+  return !Number.isNaN(Date.parse(value))
+}
+
+/** 记录可选日期 / 时间戳字段的格式问题。 */
+function checkDateField(
+  raw: Record<string, unknown>,
+  key: string,
+  path: string,
+  kind: 'date' | 'timestamp',
+  problems: string[],
+): void {
+  const value = raw[key]
+  if (value === undefined || value === null || value === '') return
+  const valid = kind === 'date' ? isBusinessDate(value) : isIsoTimestampText(value)
+  if (valid) return
+  const expected = kind === 'date' ? '日期（YYYY-MM-DD）' : ' ISO-8601 时间戳（带时区）'
+  problems.push(`${path}.${key} 不是合法的${expected}`)
+}
+
+/** 记录非负整数分字段的非法取值。 */
+function checkCentsField(
+  raw: Record<string, unknown>,
+  key: string,
+  path: string,
+  problems: string[],
+): void {
+  const value = raw[key]
+  if (value === undefined || value === null) return
+  if (readCents(value) === null) problems.push(`${path}.${key} 必须为非负整数分`)
+}
+
+/** 记录非负金额（元）字段的非法取值。 */
+function checkYuanField(
+  raw: Record<string, unknown>,
+  key: string,
+  path: string,
+  problems: string[],
+): void {
+  const value = raw[key]
+  if (value === undefined || value === null || value === '') return
+  if (legacyYuanToCents(value) === null) problems.push(`${path}.${key} 必须为非负数字`)
+}
+
+/**
+ * 校验 v2 / v3 备份的字段级约束：非法值一律拒绝导入，缺失值仍交由幂等迁移补齐。
+ * 在写入前执行，确保拒绝时不修改任何现有数据。
+ * @param schemaVersion 备份数据结构版本
+ * @param data 备份 data 部分
+ * @param existingContractIds merge 模式下主库已有合同 id（replace 模式为空集）
+ */
+function assertModernDatasetValid(
+  schemaVersion: DatasetSchemaVersion,
+  data: LegacyDatasetData,
+  existingContractIds: ReadonlySet<string>,
+): void {
+  if (schemaVersion < 2) return
+  const problems: string[] = []
+  const contracts = readArray(data.contracts)
+  const declaredIds = declaredContractIds(contracts)
+
+  contracts.forEach((raw, index) => {
+    const path = `data.contracts[${index}]`
+    if (!isPlainObject(raw)) {
+      problems.push(`${path} 不是合法对象`)
+      return
+    }
+    const direction = raw.direction
+    if (direction !== undefined && direction !== null && direction !== '') {
+      const text = readString(direction)
+      if (text !== 'sale' && text !== 'purchase') {
+        problems.push(
+          `${path}.direction 取值非法：${JSON.stringify(direction)}（仅允许 sale / purchase）`,
+        )
+      }
+    }
+    checkYuanField(raw, 'deliveredAmount', path, problems)
+    for (const key of [
+      'deliveredCents',
+      'openingDeliveredCents',
+      'receivedAmountCents',
+      'openingPaidCents',
+      'paidCents',
+    ]) {
+      checkCentsField(raw, key, path, problems)
+    }
+    for (const key of ['signDate', 'startDate', 'dueDate']) {
+      checkDateField(raw, key, path, 'date', problems)
+    }
+    for (const key of ['createdAt', 'updatedAt', 'statusChangedAt']) {
+      checkDateField(raw, key, path, 'timestamp', problems)
+    }
+    if (raw.statusLogs !== undefined && !Array.isArray(raw.statusLogs)) {
+      problems.push(`${path}.statusLogs 应为数组`)
+    } else {
+      readArray(raw.statusLogs).forEach((log, logIndex) => {
+        const logPath = `${path}.statusLogs[${logIndex}]`
+        if (!isPlainObject(log)) {
+          problems.push(`${logPath} 不是合法对象`)
+          return
+        }
+        for (const key of ['at', 'changedAt']) {
+          checkDateField(log, key, logPath, 'timestamp', problems)
+        }
+      })
+    }
+  })
+
+  readArray(data.payments).forEach((raw, index) => {
+    const path = `data.payments[${index}]`
+    if (!isPlainObject(raw)) {
+      problems.push(`${path} 不是合法对象`)
+      return
+    }
+    const contractId = readString(raw.contractId)
+    if (contractId !== null && !declaredIds.has(contractId) && !existingContractIds.has(contractId)) {
+      problems.push(`${path}.contractId 指向不存在的合同：${contractId}`)
+    }
+    checkDateField(raw, 'date', path, 'date', problems)
+    for (const key of ['createdAt', 'updatedAt']) {
+      checkDateField(raw, key, path, 'timestamp', problems)
+    }
+  })
+
+  readArray(data.deliveries).forEach((raw, index) => {
+    const path = `data.deliveries[${index}]`
+    if (!isPlainObject(raw)) {
+      problems.push(`${path} 不是合法对象`)
+      return
+    }
+    const contractId = readString(raw.contractId)
+    if (contractId === null) {
+      problems.push(`${path}.contractId 缺失`)
+    } else if (!declaredIds.has(contractId) && !existingContractIds.has(contractId)) {
+      problems.push(`${path}.contractId 指向不存在的合同：${contractId}`)
+    }
+    const amountCents = readCents(raw.amountCents) ?? legacyYuanToCents(raw.amount)
+    if (amountCents === null || amountCents <= 0) {
+      problems.push(`${path}.amount 必须大于 0`)
+    }
+    if (raw.date === undefined || raw.date === null || raw.date === '') {
+      problems.push(`${path}.date 缺失`)
+    } else {
+      checkDateField(raw, 'date', path, 'date', problems)
+    }
+    if (raw.status !== undefined && raw.status !== null && raw.status !== '') {
+      const status = readString(raw.status)
+      if (status !== 'delivered' && status !== 'accepted' && status !== 'rejected') {
+        problems.push(`${path}.status 取值非法：${JSON.stringify(raw.status)}`)
+      }
+    }
+    for (const key of ['createdAt', 'updatedAt']) {
+      checkDateField(raw, key, path, 'timestamp', problems)
+    }
+  })
+
+  if (problems.length > 0) {
+    const lines = problems.slice(0, 20).join('\n- ')
+    throw new Error(`导入失败（${problems.length} 项校验问题）：\n- ${lines}`)
+  }
+}
+
 /** 替换模式：清空业务集合，保留 settings / meta / 审计 / 幂等 / 认证。 */
 function clearBusinessRows(db: Database): void {
   db.exec(`
@@ -644,7 +818,7 @@ export function importDataset(
   payload: unknown,
   options: ImportOptions = {},
 ): ImportReport {
-  const { data } = validatePayload(payload)
+  const { schemaVersion, data } = validatePayload(payload)
   const mode = options.mode ?? 'replace'
   const nowText = nowIso(options.now ?? new Date())
   const actor = options.actor ?? 'system'
@@ -665,6 +839,13 @@ export function importDataset(
   const personnelRepo = new SqlitePersonnelRepository(runtime)
   const dictRepo = new SqliteDictRepository(runtime)
   const statusLogsRepo = new SqliteContractStatusLogRepository(runtime)
+
+  // v2 / v3 备份先做字段级校验，拒绝时绝不进入写事务。
+  const existingContractIds = new Set<string>()
+  if (mode === 'merge') {
+    for (const existing of contractsRepo.list()) existingContractIds.add(existing.id)
+  }
+  assertModernDatasetValid(schemaVersion, data, existingContractIds)
 
   db.exec('BEGIN IMMEDIATE')
   try {

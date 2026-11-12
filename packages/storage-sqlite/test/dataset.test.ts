@@ -312,6 +312,108 @@ describe('数据集导入 / 导出', () => {
     }).toEqual(before)
   })
 
+  it('拒绝 v3 备份中的非法方向，且不修改现有数据', async () => {
+    ctx = await createTestContext()
+    seedDicts(ctx)
+    ctx.contracts.insert(contractRow({ id: 'keep-direction', no: 'HT-KEEP-DIR' }))
+    const payload = {
+      app: 'contract-ledger',
+      schemaVersion: 3,
+      data: {
+        contracts: [
+          {
+            id: 'bad-direction',
+            no: 'HT-BAD-DIR',
+            counterparty: '对方',
+            typeCode: 'sales',
+            statusCode: 'executing',
+            signDate: '2026-01-01',
+            dueDate: '2026-12-31',
+            amountCents: 1000,
+            direction: 'bogus',
+          },
+        ],
+        payments: [],
+        deliveries: [],
+        personnel: [],
+        dicts: [],
+        settings: {},
+      },
+    }
+
+    expect(() => importDataset(ctx.db, payload)).toThrow(/data\.contracts\[0\]\.direction 取值非法/)
+    expect(ctx.contracts.getById('keep-direction')).not.toBeNull()
+    expect(ctx.contracts.getById('bad-direction')).toBeNull()
+    expect(countTable(ctx.db, 'contracts')).toBe(1)
+  })
+
+  it('拒绝 v3 备份中指向不存在合同的交付明细，并逐条列出路径', async () => {
+    ctx = await createTestContext()
+    const payload = {
+      app: 'contract-ledger',
+      schemaVersion: 3,
+      data: {
+        contracts: [],
+        payments: [],
+        deliveries: [
+          {
+            id: 'orphan-delivery',
+            contractId: 'missing-contract',
+            amountCents: 100,
+            date: '2026-01-01',
+          },
+        ],
+        personnel: [],
+        dicts: [],
+        settings: {},
+      },
+    }
+
+    expect(() => importDataset(ctx.db, payload)).toThrow(
+      /data\.deliveries\[0\]\.contractId 指向不存在的合同：missing-contract/,
+    )
+    expect(countTable(ctx.db, 'contracts')).toBe(0)
+    expect(countTable(ctx.db, 'deliveries')).toBe(0)
+  })
+
+  it('拒绝 v3 备份中金额不为正的交付明细', async () => {
+    ctx = await createTestContext()
+    const payload = {
+      app: 'contract-ledger',
+      schemaVersion: 3,
+      data: {
+        contracts: [
+          {
+            id: 'c-zero-delivery',
+            no: 'HT-ZERO-DELIVERY',
+            counterparty: '对方',
+            typeCode: 'sales',
+            statusCode: 'executing',
+            signDate: '2026-01-01',
+            dueDate: '2026-12-31',
+            amountCents: 1000,
+            direction: 'sale',
+          },
+        ],
+        payments: [],
+        deliveries: [
+          {
+            id: 'zero-delivery',
+            contractId: 'c-zero-delivery',
+            amountCents: 0,
+            date: '2026-01-01',
+          },
+        ],
+        personnel: [],
+        dicts: [],
+        settings: {},
+      },
+    }
+
+    expect(() => importDataset(ctx.db, payload)).toThrow(/data\.deliveries\[0\]\.amount 必须大于 0/)
+    expect(countTable(ctx.db, 'contracts')).toBe(0)
+  })
+
   it('状态日志仓储：按时间升序列出、删除合同级联清空', async () => {
     ctx = await createTestContext()
     seedDicts(ctx)
