@@ -2,10 +2,12 @@
  * Hono HTTP 服务装配：健康检查、安全中间件链与路由注册。
  *
  * 中间件顺序（design.md 认证设计）：
- * Host 白名单 → Cookie 写请求精确 Origin → 认证（Bearer 或会话 Cookie）
- * → Cookie 写请求 CSRF 双提交 → 限流 → 业务路由。
+ * Host 白名单 → Cookie 写请求精确 Origin → 限流
+ * → 认证（Bearer 或会话 Cookie）→ Cookie 写请求 CSRF 双提交 → 业务路由。
+ * 限流必须早于认证：否则未认证的暴力尝试在限流计数前就被 401 短路。
  */
 import { Hono } from 'hono'
+import type { Database } from '@ledger/storage-sqlite'
 import { createSecurityGuards } from './http/guards.js'
 import { createMeta, problemResponse } from './http/problem.js'
 import { registerAuthRoutes } from './routes/auth.js'
@@ -24,6 +26,22 @@ export const SERVER_VERSION = '0.0.0'
  */
 export function setReadonly(options: AppOptions, readonly: boolean): void {
   options.readonly = readonly
+}
+
+/**
+ * 主库占用字节数：page_count × page_size；读取失败返回 null，不影响存活探测。
+ * @param db 数据库连接
+ * @returns 字节数或 null
+ */
+function databaseBytes(db: Database): number | null {
+  try {
+    const pageCount = Number(db.pragma('page_count', { simple: true }))
+    const pageSize = Number(db.pragma('page_size', { simple: true }))
+    if (!Number.isFinite(pageCount) || !Number.isFinite(pageSize)) return null
+    return pageCount * pageSize
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -47,12 +65,19 @@ export function createApp(options: AppOptions): LedgerApp {
 
   app.use('*', guards.hostGuard)
   app.use('/api/*', guards.originGuard)
+  app.use('/api/*', guards.rateLimitGuard)
   app.use('/api/*', guards.credentialGuard)
   app.use('/api/*', guards.csrfGuard)
-  app.use('/api/*', guards.rateLimitGuard)
 
+  // 健康端点不含业务数据：版本、API 信封版本、主库大小与可写状态。
   app.get('/api/health', (c) =>
-    c.json({ ok: true, version: SERVER_VERSION, schemaVersion: '1' }),
+    c.json({
+      ok: true,
+      version: SERVER_VERSION,
+      schemaVersion: '1',
+      databaseBytes: databaseBytes(options.db),
+      writable: options.readonly !== true,
+    }),
   )
 
   registerAuthRoutes(app, options)

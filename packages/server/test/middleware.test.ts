@@ -129,3 +129,38 @@ describe('安全响应头', () => {
     expect(unauthorized.headers.get('x-content-type-options')).toBe('nosniff')
   })
 })
+
+describe('健康端点', () => {
+  it('返回版本、主库大小与可写状态，且不含业务数据', async () => {
+    const ctx = await setup()
+    const response = await ctx.app.request(`${BASE_URL}/api/health`)
+    expect(response.status).toBe(200)
+    const body = await response.json() as Record<string, unknown>
+    expect(body.ok).toBe(true)
+    expect(typeof body.version).toBe('string')
+    expect(typeof body.databaseBytes).toBe('number')
+    expect(body.databaseBytes).toBeGreaterThan(0)
+    expect(body.writable).toBe(true)
+    expect(body).not.toHaveProperty('contracts')
+  })
+
+  it('只读模式下 writable 为 false', async () => {
+    context = await createHttpTestContext({ readonly: true })
+    const response = await context.app.request(`${BASE_URL}/api/health`)
+    const body = await response.json() as Record<string, unknown>
+    expect(body.writable).toBe(false)
+  })
+})
+
+describe('认证限流', () => {
+  it('未认证请求超过 30 次/分钟返回 429 RATE_LIMITED', async () => {
+    const ctx = await setup()
+    let last: Response | null = null
+    for (let i = 0; i < 31; i += 1) {
+      last = await ctx.app.request(`${BASE_URL}/api/auth/session`)
+    }
+    expect(last?.status).toBe(429)
+    const body = await last?.json() as { code?: string }
+    expect(body.code).toBe('RATE_LIMITED')
+  })
+})
