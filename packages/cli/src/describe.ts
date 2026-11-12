@@ -1,9 +1,33 @@
-import { describeCore as describeCoreCatalog, type CoreDescription } from '@ledger/core'
+import {
+  describeCore as describeCoreCatalog,
+  toJsonSchema,
+  type CommandAnnotations,
+  type CommandRegistry,
+  type CoreDescription,
+  type ErrorCode,
+  type JsonSchemaObject,
+} from '@ledger/core'
 
-/** 命令摘要；Wave 4.1 / 4.4 填充真实命令后替换占位空数组。 */
-export interface CommandSummary {
+/** 单条命令的机器可读描述。 */
+export interface CommandDescription {
+  /** 点号命令名，例如 contract.upsert。 */
   name: string
+  /** 一句话中文摘要。 */
   summary: string
+  /** 只读/破坏性/幂等/开放世界注解。 */
+  annotations: CommandAnnotations
+  /** 该命令可能返回的稳定错误码。 */
+  errorCodes: readonly ErrorCode[]
+  /** 入参 JSON Schema（draft 2020-12）。 */
+  inputSchema: JsonSchemaObject
+  /** 出参 JSON Schema（draft 2020-12）。 */
+  outputSchema: JsonSchemaObject
+}
+
+/** `describe --schema` 中单条命令的 schema 组。 */
+export interface CommandSchemaEntry {
+  input: JsonSchemaObject
+  output: JsonSchemaObject
 }
 
 /**
@@ -16,15 +40,37 @@ export function describeCatalog(): CoreDescription {
 }
 
 /**
- * 把 core 的 schema 列表整理成单份 JSON Schema 目录，供 `describe --schema` 输出。
- * @param catalog core 能力描述
+ * 从命令注册表生成命令描述列表，顺序与注册顺序一致。
+ * @param registry 命令注册表
+ * @returns 命令描述数组
+ */
+export function describeCommands(registry: CommandRegistry): CommandDescription[] {
+  return registry.list().map((command) => ({
+    name: command.name,
+    summary: command.summary,
+    annotations: command.annotations,
+    errorCodes: command.errorCodes,
+    inputSchema: toJsonSchema(command.input, `${command.name}.input`),
+    outputSchema: toJsonSchema(command.output, `${command.name}.output`),
+  }))
+}
+
+/**
+ * 把命令描述整理成 `describe --schema` 的目录：definitions 以命令名为键。
+ * @param commands 命令描述列表
  * @returns 带 $schema 与 definitions 的目录对象
  */
-export function jsonSchemaCatalog(catalog: CoreDescription): Record<string, unknown> {
+export function commandSchemaCatalog(
+  commands: readonly CommandDescription[],
+): Record<string, unknown> {
+  const definitions: Record<string, CommandSchemaEntry> = {}
+  for (const command of commands) {
+    definitions[command.name] = { input: command.inputSchema, output: command.outputSchema }
+  }
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
     title: 'ledger-command-catalog',
-    description: '命令输入与输出 JSON Schema 目录；命令级 schema 在 Wave 4.4 补齐。',
-    definitions: Object.fromEntries(catalog.schemas.map((entry) => [entry.name, entry.jsonSchema])),
+    description: '按命令名索引的输入与输出 JSON Schema 目录。',
+    definitions,
   }
 }

@@ -24,7 +24,7 @@ interface CliEnvelope {
 }
 
 beforeAll(() => {
-  execSync('npx tsc -b --pretty false', { cwd: REPO_ROOT, stdio: 'pipe' })
+  execSync('npx tsc -b packages/cli --pretty false', { cwd: REPO_ROOT, stdio: 'pipe' })
 }, 120_000)
 
 describe('ledger describe', () => {
@@ -37,7 +37,7 @@ describe('ledger describe', () => {
     expect(envelope.command).toBe('describe')
     expect(envelope.ok).toBe(true)
     expect(envelope.data?.errorCodes).toHaveLength(Object.keys(ERROR_CATALOG).length)
-    expect(envelope.data?.commands).toEqual([])
+    expect(envelope.data?.commands).toHaveLength(18)
     expect(envelope.data?.schemaVersion).toBe(3)
     expect(envelope.data?.schemas?.length).toBe(8)
     expect(envelope.data?.schemas?.some((entry) => entry.name === 'contractCreate')).toBe(true)
@@ -52,8 +52,8 @@ describe('ledger describe', () => {
       definitions?: Record<string, unknown>
     }
     expect(schema.$schema).toBe('https://json-schema.org/draft/2020-12/schema')
-    expect(Object.keys(schema.definitions ?? {})).toHaveLength(8)
-    expect(schema.definitions?.contractCreate).toBeDefined()
+    expect(Object.keys(schema.definitions ?? {})).toHaveLength(18)
+    expect(schema.definitions?.['contract.upsert']).toBeDefined()
   })
 
   it('--version 成功退出', async () => {
