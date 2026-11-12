@@ -1,6 +1,7 @@
 import {
   LedgerError,
   type ContractRepository,
+  type ContractStatusLogRepository,
   type DeliveryRepository,
   type DictRepository,
   type LedgerStore,
@@ -17,6 +18,7 @@ import { SqliteDeliveryRepository } from './repo/deliveries.js'
 import { SqliteDictRepository } from './repo/dicts.js'
 import { SqlitePaymentRepository } from './repo/payments.js'
 import { SqlitePersonnelRepository } from './repo/personnel.js'
+import { SqliteContractStatusLogRepository } from './repo/status-logs.js'
 import { busyError, isBusyError, toTriggerError } from './store-errors.js'
 import {
   auditRows,
@@ -38,6 +40,7 @@ export interface LedgerRepositories {
   readonly deliveries: DeliveryRepository
   readonly personnel: PersonnelRepository
   readonly dicts: DictRepository
+  readonly statusLogs: ContractStatusLogRepository
 }
 
 /**
@@ -49,6 +52,7 @@ export class SqliteLedgerStore implements LedgerStore {
   readonly deliveries: DeliveryRepository
   readonly personnel: PersonnelRepository
   readonly dicts: DictRepository
+  readonly statusLogs: ContractStatusLogRepository
 
   /**
    * @param db 已打开的数据库连接
@@ -64,6 +68,7 @@ export class SqliteLedgerStore implements LedgerStore {
     this.deliveries = repos?.deliveries ?? new SqliteDeliveryRepository(runtime)
     this.personnel = repos?.personnel ?? new SqlitePersonnelRepository(runtime)
     this.dicts = repos?.dicts ?? new SqliteDictRepository(runtime)
+    this.statusLogs = repos?.statusLogs ?? new SqliteContractStatusLogRepository(runtime)
   }
 
   getVersion(): number {

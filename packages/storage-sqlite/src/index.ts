@@ -45,6 +45,8 @@ export { SqliteDeliveryRepository } from './repo/deliveries.js'
 export { SqliteDictRepository } from './repo/dicts.js'
 export { SqlitePaymentRepository } from './repo/payments.js'
 export { SqlitePersonnelRepository } from './repo/personnel.js'
+export { SqliteContractStatusLogRepository, toStatusLogRow } from './repo/status-logs.js'
+export type { StatusLogRecord } from './repo/status-logs.js'
 
 // 契约行映射（供上层只读视图复用）
 export {
@@ -58,6 +60,29 @@ export {
 
 // 合同视图读取
 export { buildContractViewQuery, getContractView, listContractViews } from './views.js'
+
+// 默认字典与设置种子
+export { seedDefaultDictionaries } from './seed.js'
+export type { SeedResult } from './seed.js'
+
+// 数据集导入 / 导出
+export { DATASET_APP, DATASET_SCHEMA_VERSION, exportDataset, importDataset } from './dataset.js'
+export type {
+  DatasetDictRow,
+  DatasetExport,
+  DatasetSchemaVersion,
+  ImportOptions,
+  ImportReport,
+  LegacyContract,
+  LegacyDatasetData,
+  LegacyDatasetPayload,
+  LegacyDelivery,
+  LegacyDict,
+  LegacyDictCategory,
+  LegacyPayment,
+  LegacyPersonnel,
+  LegacyStatusLog,
+} from './dataset.js'
 
 // kysely-codegen 生成的库类型
 export type { DB } from './generated/db.js'

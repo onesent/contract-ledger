@@ -5,6 +5,7 @@ import path from 'node:path'
 import { LedgerError, type WriteOptions } from '@ledger/core'
 import {
   SqliteContractRepository,
+  SqliteContractStatusLogRepository,
   SqliteDeliveryRepository,
   SqliteDictRepository,
   SqlitePaymentRepository,
@@ -35,6 +36,7 @@ export interface TestContext {
   deliveries: SqliteDeliveryRepository
   personnel: SqlitePersonnelRepository
   dicts: SqliteDictRepository
+  statusLogs: SqliteContractStatusLogRepository
 }
 
 /**
@@ -53,6 +55,7 @@ export async function createTestContext(): Promise<TestContext> {
     deliveries: new SqliteDeliveryRepository(runtime),
     personnel: new SqlitePersonnelRepository(runtime),
     dicts: new SqliteDictRepository(runtime),
+    statusLogs: new SqliteContractStatusLogRepository(runtime),
   }
   return {
     dir,
@@ -166,6 +169,8 @@ export type CountableTable =
   | 'deliveries'
   | 'personnel'
   | 'dict_items'
+  | 'dict_categories'
+  | 'contract_status_logs'
   | 'audit_log'
   | 'idempotency_keys'
 
