@@ -11,6 +11,9 @@
       "import": "./dist/index.js"
     }
   },
+  "scripts": {
+    "codegen": "node scripts/codegen.mjs"
+  },
   "dependencies": {
     "@ledger/core": "*",
     "better-sqlite3": "13.0.3",
