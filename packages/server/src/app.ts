@@ -35,6 +35,16 @@ export function createApp(options: AppOptions): LedgerApp {
   const app = new Hono<AppEnv>()
   const guards = createSecurityGuards(options)
 
+  // 基线安全响应头：API 只返回 JSON，使用最严格的 CSP；反向代理或静态站点需另行放开。
+  app.use('*', async (c, next) => {
+    await next()
+    c.header('X-Content-Type-Options', 'nosniff')
+    c.header('X-Frame-Options', 'DENY')
+    c.header('Referrer-Policy', 'no-referrer')
+    c.header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'")
+    c.header('Cache-Control', 'no-store')
+  })
+
   app.use('*', guards.hostGuard)
   app.use('/api/*', guards.originGuard)
   app.use('/api/*', guards.credentialGuard)

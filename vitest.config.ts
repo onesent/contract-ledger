@@ -10,7 +10,12 @@ const fromRoot = (path: string) => fileURLToPath(new URL(path, import.meta.url))
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['packages/**/test/**/*.test.ts', 'scripts/**/*.test.mjs'],
+    include: [
+      'packages/**/test/**/*.test.ts',
+      'packages/**/test/**/*.test.js',
+      'scripts/**/*.test.mjs',
+      'test/**/*.test.ts',
+    ],
   },
   resolve: {
     alias: {

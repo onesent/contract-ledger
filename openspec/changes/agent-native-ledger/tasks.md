@@ -44,32 +44,32 @@
 - [x] 5.6 实现命令端点：映射 `Idempotency-Key`、`If-Match`/`ETag` 与 problem+json；测试 400 缺键、409 并发、412 版本、422 校验、200 成功并返回新 ETag
 - [x] 5.7 实现 `rotate` / `revoke` / `logout` 与 CLI `ledger auth token|rotate|revoke|sessions`；测试轮换后旧令牌 401、会话列表可读
 - [x] 5.8 实现导出/导入端点与只读模式：写失败后转只读、读与导出仍可用；测试返回 `READONLY` 且可导出
-- [ ] 5.9 在 `docs/security.md` 记录威胁模型：受保护项（CSRF、DNS rebinding、令牌泄漏）与不受保护项（同 OS 用户进程）；核对文档中的每条断言都有对应测试
+- [x] 5.9 在 `docs/security.md` 记录威胁模型：受保护项（CSRF、DNS rebinding、令牌泄漏）与不受保护项（同 OS 用户进程）；核对文档中的每条断言都有对应测试
 
 ## 6. MCP 与能力发现
 
 - [x] 6.1 实现 stdio MCP server：由命令注册表生成 `tools/list`，带 annotations、`inputSchema`/`outputSchema` 与 `structuredContent`；测试断言工具数量、注解与注册表一致
 - [x] 6.2 增加协议版本开关：默认 v2（2026-07-28），`--legacy` 使用 v1 SDK；用 MCP Inspector 或裸 stdio 脚本各跑一次 `tools/list` 与一次调用
 - [x] 6.3 生成发现产物：`schema/commands.json`、`AGENTS.md` 片段、`llms.txt`；测试断言 `describe` 输出与 JSON 文件内容一致
-- [ ] 6.4 在 `docs/mcp-compat.md` 记录 Claude Code / Codex / Cursor 的握手与调用结果；按文档步骤复跑一次，结果与记录一致
+- [x] 6.4 在 `docs/mcp-compat.md` 记录 Claude Code / Codex / Cursor 的握手与调用结果；按文档步骤复跑一次，结果与记录一致
 
 ## 7. 前端迁移
 
-- [ ] 7.1 新增 `web/src/api/client.js` 与 `useAuth`：同源 Cookie、CSRF 头、401 跳转配对页；单测 mock fetch 断言错误映射
-- [ ] 7.2 新增 `/pair` 页面与路由守卫：输入配对码、展示过期/限流/无效状态；手工冒烟：未认证访问任意页面被引导到配对页
-- [ ] 7.3 用 API 客户端替换 `src/data/store.js` 与 `useLedger` 数据层；应用启动后首页、合同、人员、字典、设置均能加载数据，控制台无报错
-- [ ] 7.4 合同/人员/字典列表改为服务端分页、筛选、排序；手工验证 375px 与桌面布局无横向溢出，翻页与筛选结果与接口一致
-- [ ] 7.5 `BackupPanel` 接入导出/导入端点，保留二次确认与只读禁用；手工验证导出文件不含密钥、导入后列表刷新
-- [ ] 7.6 删除 IndexedDB/localStorage 数据层与单文件构建脚本；`npm run build` 产物不再声称单文件，仓库中无残留 `store.js` 引用
-- [ ] 7.7 重写 `README.md` 与更新 `AGENTS.md`：新架构、命令、认证、迁移与回滚步骤；按 README 从零启动一次并跑通示例命令
+- [x] 7.1 新增 `web/src/api/client.js` 与 `useAuth`：同源 Cookie、CSRF 头、401 跳转配对页；单测 mock fetch 断言错误映射
+- [x] 7.2 新增 `/pair` 页面与路由守卫：输入配对码、展示过期/限流/无效状态；手工冒烟：未认证访问任意页面被引导到配对页
+- [x] 7.3 用 API 客户端替换 `src/data/store.js` 与 `useLedger` 数据层；应用启动后首页、合同、人员、字典、设置均能加载数据，控制台无报错
+- [x] 7.4 合同/人员/字典列表改为服务端分页、筛选、排序；手工验证 375px 与桌面布局无横向溢出，翻页与筛选结果与接口一致
+- [x] 7.5 `BackupPanel` 接入导出/导入端点，保留二次确认与只读禁用；手工验证导出文件不含密钥、导入后列表刷新
+- [x] 7.6 删除 IndexedDB/localStorage 数据层与单文件构建脚本；`npm run build` 产物不再声称单文件，仓库中无残留 `store.js` 引用
+- [x] 7.7 重写 `README.md` 与更新 `AGENTS.md`：新架构、命令、认证、迁移与回滚步骤；按 README 从零启动一次并跑通示例命令
 
 ## 8. 集成验收
 
-- [ ] 8.1 端到端：CLI、HTTP、MCP 各创建一份合同并登记同一笔付款（同一幂等键），断言只产生一条流水且三者查询结果一致
-- [ ] 8.2 并发：CLI 与 server 同时更新同一合同，断言无部分写入、无 `SQLITE_BUSY` 泄漏到用户层、最终版本单调递增
-- [ ] 8.3 恢复演练：备份 → 删除主库 → 从备份恢复 → `validate` 零错误，合同与流水数量一致
-- [ ] 8.4 性能抽查：生成 1 万份合同，列表分页与按方向统计走索引（`EXPLAIN QUERY PLAN` 无全表扫描），响应在本机可接受
-- [ ] 8.5 安全清单：回环绑定、Host 白名单、Origin 校验、CSRF、限流、令牌吊销、CSP、`nosniff` 逐项手工验证并记录结果
+- [x] 8.1 端到端：CLI、HTTP、MCP 各创建一份合同并登记同一笔付款（同一幂等键），断言只产生一条流水且三者查询结果一致
+- [x] 8.2 并发：CLI 与 server 同时更新同一合同，断言无部分写入、无 `SQLITE_BUSY` 泄漏到用户层、最终版本单调递增
+- [x] 8.3 恢复演练：备份 → 删除主库 → 从备份恢复 → `validate` 零错误，合同与流水数量一致
+- [x] 8.4 性能抽查：生成 1 万份合同，列表分页与按方向统计走索引（`EXPLAIN QUERY PLAN` 无全表扫描），响应在本机可接受
+- [x] 8.5 安全清单：回环绑定、Host 白名单、Origin 校验、CSRF、限流、令牌吊销、CSP、`nosniff` 逐项手工验证并记录结果
 
 ## Workflow follow-up
 

@@ -112,3 +112,20 @@ describe('CSRF 双提交', () => {
     expect(response.status).toBe(200)
   })
 })
+
+describe('安全响应头', () => {
+  it('成功与失败响应都包含 nosniff、CSP、禁止嵌入与 no-store', async () => {
+    const ctx = await setup()
+    const health = await ctx.app.request(`${BASE_URL}/api/health`)
+    expect(health.status).toBe(200)
+    expect(health.headers.get('x-content-type-options')).toBe('nosniff')
+    expect(health.headers.get('x-frame-options')).toBe('DENY')
+    expect(health.headers.get('referrer-policy')).toBe('no-referrer')
+    expect(health.headers.get('cache-control')).toBe('no-store')
+    expect(health.headers.get('content-security-policy')).toContain("default-src 'none'")
+
+    const unauthorized = await ctx.app.request(`${BASE_URL}/api/contracts`)
+    expect(unauthorized.status).toBe(401)
+    expect(unauthorized.headers.get('x-content-type-options')).toBe('nosniff')
+  })
+})

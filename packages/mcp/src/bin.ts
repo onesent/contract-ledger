@@ -10,6 +10,7 @@ import {
   defaultMigrationsDir,
   migrateDatabase,
   openDatabase,
+  seedDefaultDictionaries,
 } from '@ledger/storage-sqlite'
 import { createCoreRegistry } from './registry.js'
 import { runStdio } from './server.js'
@@ -63,6 +64,8 @@ async function main(): Promise<void> {
   const db = openDatabase({ file: dbFile })
   try {
     await migrateDatabase(db, { migrationsDir: defaultMigrationsDir() })
+    // 与 server/CLI 保持一致：空库先写入默认字典，agent 可直接 upsert 合同。
+    seedDefaultDictionaries(db)
     const store = createLedgerStore(db)
     await runStdio({
       registry: createCoreRegistry(),
