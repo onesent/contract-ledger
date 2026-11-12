@@ -20,13 +20,13 @@
 - [x] 3.1 编写 `001_init.sql`：合同/流水/交付/人员/字典/状态日志/审计/幂等表，含外键、CHECK、索引、`v_contract_finance` 视图与金额守卫触发器；在临时库执行迁移后断言 `PRAGMA foreign_keys`、`integrity_check` 与 `sqlite_version()`
 - [x] 3.2 封装 Postgrator 运行器：`BEGIN IMMEDIATE` → 迁移 → `COMMIT`，失败 `ROLLBACK`，迁移前 `VACUUM INTO` 备份；单测覆盖重复执行幂等、篡改已应用脚本被校验和拒绝、脚本中途失败整体回滚
 - [x] 3.3 用 `kysely-codegen` 从迁移后的库生成类型，封装 repository：合同/流水/交付/人员/字典的读写；集成测试覆盖外键拒绝、唯一键冲突与视图读数
-- [ ] 3.4 实现付款/交付事务：写事实 + 重算视图 + 校验金额上限；单测覆盖超付被拒、合同降额低于已付被拒、删除流水后派生值回退
-- [ ] 3.5 实现幂等表与审计写入：同一事务内写 `idempotency_keys` 与 `audit_log`；单测覆盖相同键相同指纹返回旧结果、相同键不同指纹被拒、审计含 actor 与前后版本
-- [ ] 3.6 实现备份与恢复：`VACUUM INTO` 生成备份、`PRAGMA integrity_check` 校验、从备份恢复；集成测试断言恢复后各表记录数与版本号一致
+- [x] 3.4 实现付款/交付事务：写事实 + 重算视图 + 校验金额上限；单测覆盖超付被拒、合同降额低于已付被拒、删除流水后派生值回退
+- [x] 3.5 实现幂等表与审计写入：同一事务内写 `idempotency_keys` 与 `audit_log`；单测覆盖相同键相同指纹返回旧结果、相同键不同指纹被拒、审计含 actor 与前后版本
+- [x] 3.6 实现备份与恢复：`VACUUM INTO` 生成备份、`PRAGMA integrity_check` 校验、从备份恢复；集成测试断言恢复后各表记录数与版本号一致
 
 ## 4. 命令注册表与 CLI
 
-- [ ] 4.1 实现命令注册表与分发：统一入参校验、`dryRun` diff、`expectedVersion`、幂等与错误映射；单测覆盖 dry-run 不写库、版本冲突 `STALE_WRITE`、批量原子回滚
+- [x] 4.1 实现命令注册表与分发：统一入参校验、`dryRun` diff、`expectedVersion`、幂等与错误映射；单测覆盖 dry-run 不写库、版本冲突 `STALE_WRITE`、批量原子回滚
 - [x] 4.2 搭建 Commander CLI：全局 `--json`、`--dry-run`、`--yes`、`--idempotency-key`，统一 JSON 信封与退出码 0/1/2/4；用 execa 跑 e2e 断言成功/用法错误/未认证的输出结构
 - [ ] 4.3 实现 `contract`（list/get/upsert/delete）、`payment`、`delivery`、`personnel`、`dict` 子命令；e2e 覆盖新增合同 + 3 笔付款 + 查询详情，断言派生金额正确
 - [ ] 4.4 实现 `ledger describe --json` 与 `ledger validate`：输出命令、字段、枚举、错误码；`validate` 执行 `integrity_check` 与业务不变量扫描，测试库零错误、注入坏数据后能定位
@@ -36,8 +36,8 @@
 
 ## 5. 认证与本地服务
 
-- [ ] 5.1 建 `auth_sessions` / `auth_tokens` 表与令牌工具：256 位随机、SHA-256 存储、`timingSafeEqual` 比较；单测覆盖哈希不落明文、过期与吊销判定
-- [ ] 5.2 实现配对流程：启动打印一次性配对码（8 位、TTL 120 秒、最多 5 次尝试）；单测覆盖成功、过期、重复使用、超限返回 `PAIR_CODE_INVALID` / `RATE_LIMITED`
+- [x] 5.1 建 `auth_sessions` / `auth_tokens` 表与令牌工具：256 位随机、SHA-256 存储、`timingSafeEqual` 比较；单测覆盖哈希不落明文、过期与吊销判定
+- [x] 5.2 实现配对流程：启动打印一次性配对码（8 位、TTL 120 秒、最多 5 次尝试）；单测覆盖成功、过期、重复使用、超限返回 `PAIR_CODE_INVALID` / `RATE_LIMITED`
 - [ ] 5.3 实现回环与 Host/Origin 中间件：仅 `127.0.0.1`/`::1`、Host 白名单、精确 Origin；测试伪造 Host、`Origin: null`、其他 localhost 端口均被拒绝
 - [ ] 5.4 实现 Cookie 会话与 Bearer 双平面：Cookie 写请求校验 CSRF 头，Bearer 豁免；测试两类主体执行同一命令结果一致、吊销后立即 401
 - [ ] 5.5 实现 Hono 读端点：合同/流水/交付/人员/字典列表与详情，服务端分页、筛选、排序；接口测试断言第 2 页与总数正确、派生字段与视图一致
