@@ -28,22 +28,22 @@
 
 - [x] 4.1 实现命令注册表与分发：统一入参校验、`dryRun` diff、`expectedVersion`、幂等与错误映射；单测覆盖 dry-run 不写库、版本冲突 `STALE_WRITE`、批量原子回滚
 - [x] 4.2 搭建 Commander CLI：全局 `--json`、`--dry-run`、`--yes`、`--idempotency-key`，统一 JSON 信封与退出码 0/1/2/4；用 execa 跑 e2e 断言成功/用法错误/未认证的输出结构
-- [ ] 4.3 实现 `contract`（list/get/upsert/delete）、`payment`、`delivery`、`personnel`、`dict` 子命令；e2e 覆盖新增合同 + 3 笔付款 + 查询详情，断言派生金额正确
-- [ ] 4.4 实现 `ledger describe --json` 与 `ledger validate`：输出命令、字段、枚举、错误码；`validate` 执行 `integrity_check` 与业务不变量扫描，测试库零错误、注入坏数据后能定位
-- [ ] 4.5 实现 `ledger query --readonly --sql`：仅允许 `SELECT/WITH/EXPLAIN`、强制行数上限、超时与 `query_only`；单测断言 INSERT/UPDATE/DDL 被拒
-- [ ] 4.6 实现 `ledger import --backup <v2.json>`：迁移前快照、字段映射、记录数报告；用一份 v2 fixture 导入后断言合同/流水/交付/字典数量一致且 `validate` 通过
-- [ ] 4.7 实现 `ledger backup` 与 `ledger export --json`：导出剔除 `apiKey`/`baseUrl`/`ai.enabled`；测试断言字段不存在且备份可被 `integrity_check`
+- [x] 4.3 实现 `contract`（list/get/upsert/delete）、`payment`、`delivery`、`personnel`、`dict` 子命令；e2e 覆盖新增合同 + 3 笔付款 + 查询详情，断言派生金额正确
+- [x] 4.4 实现 `ledger describe --json` 与 `ledger validate`：输出命令、字段、枚举、错误码；`validate` 执行 `integrity_check` 与业务不变量扫描，测试库零错误、注入坏数据后能定位
+- [x] 4.5 实现 `ledger query --readonly --sql`：仅允许 `SELECT/WITH/EXPLAIN`、强制行数上限、超时与 `query_only`；单测断言 INSERT/UPDATE/DDL 被拒
+- [x] 4.6 实现 `ledger import --backup <v2.json>`：迁移前快照、字段映射、记录数报告；用一份 v2 fixture 导入后断言合同/流水/交付/字典数量一致且 `validate` 通过
+- [x] 4.7 实现 `ledger backup` 与 `ledger export --json`：导出剔除 `apiKey`/`baseUrl`/`ai.enabled`；测试断言字段不存在且备份可被 `integrity_check`
 
 ## 5. 认证与本地服务
 
 - [x] 5.1 建 `auth_sessions` / `auth_tokens` 表与令牌工具：256 位随机、SHA-256 存储、`timingSafeEqual` 比较；单测覆盖哈希不落明文、过期与吊销判定
 - [x] 5.2 实现配对流程：启动打印一次性配对码（8 位、TTL 120 秒、最多 5 次尝试）；单测覆盖成功、过期、重复使用、超限返回 `PAIR_CODE_INVALID` / `RATE_LIMITED`
-- [ ] 5.3 实现回环与 Host/Origin 中间件：仅 `127.0.0.1`/`::1`、Host 白名单、精确 Origin；测试伪造 Host、`Origin: null`、其他 localhost 端口均被拒绝
-- [ ] 5.4 实现 Cookie 会话与 Bearer 双平面：Cookie 写请求校验 CSRF 头，Bearer 豁免；测试两类主体执行同一命令结果一致、吊销后立即 401
-- [ ] 5.5 实现 Hono 读端点：合同/流水/交付/人员/字典列表与详情，服务端分页、筛选、排序；接口测试断言第 2 页与总数正确、派生字段与视图一致
-- [ ] 5.6 实现命令端点：映射 `Idempotency-Key`、`If-Match`/`ETag` 与 problem+json；测试 400 缺键、409 并发、412 版本、422 校验、200 成功并返回新 ETag
-- [ ] 5.7 实现 `rotate` / `revoke` / `logout` 与 CLI `ledger auth token|rotate|revoke|sessions`；测试轮换后旧令牌 401、会话列表可读
-- [ ] 5.8 实现导出/导入端点与只读模式：写失败后转只读、读与导出仍可用；测试返回 `READONLY` 且可导出
+- [x] 5.3 实现回环与 Host/Origin 中间件：仅 `127.0.0.1`/`::1`、Host 白名单、精确 Origin；测试伪造 Host、`Origin: null`、其他 localhost 端口均被拒绝
+- [x] 5.4 实现 Cookie 会话与 Bearer 双平面：Cookie 写请求校验 CSRF 头，Bearer 豁免；测试两类主体执行同一命令结果一致、吊销后立即 401
+- [x] 5.5 实现 Hono 读端点：合同/流水/交付/人员/字典列表与详情，服务端分页、筛选、排序；接口测试断言第 2 页与总数正确、派生字段与视图一致
+- [x] 5.6 实现命令端点：映射 `Idempotency-Key`、`If-Match`/`ETag` 与 problem+json；测试 400 缺键、409 并发、412 版本、422 校验、200 成功并返回新 ETag
+- [x] 5.7 实现 `rotate` / `revoke` / `logout` 与 CLI `ledger auth token|rotate|revoke|sessions`；测试轮换后旧令牌 401、会话列表可读
+- [x] 5.8 实现导出/导入端点与只读模式：写失败后转只读、读与导出仍可用；测试返回 `READONLY` 且可导出
 - [ ] 5.9 在 `docs/security.md` 记录威胁模型：受保护项（CSRF、DNS rebinding、令牌泄漏）与不受保护项（同 OS 用户进程）；核对文档中的每条断言都有对应测试
 
 ## 6. MCP 与能力发现
