@@ -9,17 +9,17 @@
 
 ## 2. 领域内核（core）
 
-- [ ] 2.1 用 Zod 定义 Contract / Payment / Delivery / Personnel / Dict 的输入与输出 schema，并导出 `z.toJSONSchema()`；单测覆盖必填、枚举、日期格式、长度上限与未知字段拒绝
-- [ ] 2.2 实现金额工具：元字符串 → 整数分、half-up 舍入、负数处理、展示格式化；单测覆盖 `0.005`、负数、超两位小数与超大金额，断言无浮点误差
-- [ ] 2.3 实现领域不变量：合同金额 ≥ 已付/已交付、方向锁定、负责人须在职、合同编号唯一、到期日 ≥ 开始日；每条不变量一个失败用例，断言返回对应错误码
-- [ ] 2.4 实现派生查询：已付、未付、资金进度、交付进度、逾期/临期、按方向统计；用固定 fixture 断言与 SQL 视图结果一致（金额为 0 时进度返回 `null`）
-- [ ] 2.5 建立错误码目录（code、HTTP 状态、修复建议）与 `describe()` 输出；单测断言每个错误码都有状态映射与提示，且 JSON Schema 可序列化
+- [x] 2.1 用 Zod 定义 Contract / Payment / Delivery / Personnel / Dict 的输入与输出 schema，并导出 `z.toJSONSchema()`；单测覆盖必填、枚举、日期格式、长度上限与未知字段拒绝
+- [x] 2.2 实现金额工具：元字符串 → 整数分、half-up 舍入、负数处理、展示格式化；单测覆盖 `0.005`、负数、超两位小数与超大金额，断言无浮点误差
+- [x] 2.3 实现领域不变量：合同金额 ≥ 已付/已交付、方向锁定、负责人须在职、合同编号唯一、到期日 ≥ 开始日；每条不变量一个失败用例，断言返回对应错误码
+- [x] 2.4 实现派生查询：已付、未付、资金进度、交付进度、逾期/临期、按方向统计；用固定 fixture 断言与 SQL 视图结果一致（金额为 0 时进度返回 `null`）
+- [x] 2.5 建立错误码目录（code、HTTP 状态、修复建议）与 `describe()` 输出；单测断言每个错误码都有状态映射与提示，且 JSON Schema 可序列化
 
 ## 3. SQLite 存储层
 
-- [ ] 3.1 编写 `001_init.sql`：合同/流水/交付/人员/字典/状态日志/审计/幂等表，含外键、CHECK、索引、`v_contract_finance` 视图与金额守卫触发器；在临时库执行迁移后断言 `PRAGMA foreign_keys`、`integrity_check` 与 `sqlite_version()`
-- [ ] 3.2 封装 Postgrator 运行器：`BEGIN IMMEDIATE` → 迁移 → `COMMIT`，失败 `ROLLBACK`，迁移前 `VACUUM INTO` 备份；单测覆盖重复执行幂等、篡改已应用脚本被校验和拒绝、脚本中途失败整体回滚
-- [ ] 3.3 用 `kysely-codegen` 从迁移后的库生成类型，封装 repository：合同/流水/交付/人员/字典的读写；集成测试覆盖外键拒绝、唯一键冲突与视图读数
+- [x] 3.1 编写 `001_init.sql`：合同/流水/交付/人员/字典/状态日志/审计/幂等表，含外键、CHECK、索引、`v_contract_finance` 视图与金额守卫触发器；在临时库执行迁移后断言 `PRAGMA foreign_keys`、`integrity_check` 与 `sqlite_version()`
+- [x] 3.2 封装 Postgrator 运行器：`BEGIN IMMEDIATE` → 迁移 → `COMMIT`，失败 `ROLLBACK`，迁移前 `VACUUM INTO` 备份；单测覆盖重复执行幂等、篡改已应用脚本被校验和拒绝、脚本中途失败整体回滚
+- [x] 3.3 用 `kysely-codegen` 从迁移后的库生成类型，封装 repository：合同/流水/交付/人员/字典的读写；集成测试覆盖外键拒绝、唯一键冲突与视图读数
 - [ ] 3.4 实现付款/交付事务：写事实 + 重算视图 + 校验金额上限；单测覆盖超付被拒、合同降额低于已付被拒、删除流水后派生值回退
 - [ ] 3.5 实现幂等表与审计写入：同一事务内写 `idempotency_keys` 与 `audit_log`；单测覆盖相同键相同指纹返回旧结果、相同键不同指纹被拒、审计含 actor 与前后版本
 - [ ] 3.6 实现备份与恢复：`VACUUM INTO` 生成备份、`PRAGMA integrity_check` 校验、从备份恢复；集成测试断言恢复后各表记录数与版本号一致
@@ -27,7 +27,7 @@
 ## 4. 命令注册表与 CLI
 
 - [ ] 4.1 实现命令注册表与分发：统一入参校验、`dryRun` diff、`expectedVersion`、幂等与错误映射；单测覆盖 dry-run 不写库、版本冲突 `STALE_WRITE`、批量原子回滚
-- [ ] 4.2 搭建 Commander CLI：全局 `--json`、`--dry-run`、`--yes`、`--idempotency-key`，统一 JSON 信封与退出码 0/1/2/4；用 execa 跑 e2e 断言成功/用法错误/未认证的输出结构
+- [x] 4.2 搭建 Commander CLI：全局 `--json`、`--dry-run`、`--yes`、`--idempotency-key`，统一 JSON 信封与退出码 0/1/2/4；用 execa 跑 e2e 断言成功/用法错误/未认证的输出结构
 - [ ] 4.3 实现 `contract`（list/get/upsert/delete）、`payment`、`delivery`、`personnel`、`dict` 子命令；e2e 覆盖新增合同 + 3 笔付款 + 查询详情，断言派生金额正确
 - [ ] 4.4 实现 `ledger describe --json` 与 `ledger validate`：输出命令、字段、枚举、错误码；`validate` 执行 `integrity_check` 与业务不变量扫描，测试库零错误、注入坏数据后能定位
 - [ ] 4.5 实现 `ledger query --readonly --sql`：仅允许 `SELECT/WITH/EXPLAIN`、强制行数上限、超时与 `query_only`；单测断言 INSERT/UPDATE/DDL 被拒
