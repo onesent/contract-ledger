@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { copyFileSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -9,8 +9,6 @@ import type { Database } from './db.js'
 export interface MigrateOptions {
   /** 迁移脚本目录（glob 匹配目录下的 *.sql）。 */
   migrationsDir: string
-  /** 迁移前 VACUUM INTO 备份目录；缺省为数据库文件同级的 backups/。 */
-  backupDir?: string
 }
 
 /** 迁移结果。 */
@@ -58,39 +56,15 @@ function quoteSqlString(value: string): string {
   return `'${value.replace(/'/g, "''")}'`
 }
 
-/** 生成不会互相覆盖的备份文件名。 */
-function backupFileName(): string {
-  const now = new Date()
-  const pad = (value: number): string => String(value).padStart(2, '0')
-  const stamp =
-    `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}` +
-    `-${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}` +
-    `-${String(now.getUTCMilliseconds()).padStart(3, '0')}`
-  return `ledger-${stamp}-p${process.pid}.db`
-}
-
 /**
  * 用 VACUUM INTO 生成一份一致的数据库副本（不阻塞写入）。
  * 目标文件必须不存在，否则 SQLite 会报错以避免覆盖。
+ * 仅供 `ledger backup` / 数据集导出等显式备份入口调用；迁移不再自动备份。
  * @param db 源数据库连接
  * @param destination 目标文件路径
  */
 export function vacuumInto(db: Database, destination: string): void {
   db.exec(`VACUUM INTO ${quoteSqlString(destination)}`)
-}
-
-/**
- * 迁移前热备份：仅在文件库（非 :memory:）上执行。
- * @returns 生成的备份路径；内存库返回 null
- */
-function backupBeforeMigration(db: Database, options: MigrateOptions): string | null {
-  const file = db.name
-  if (!file || file === ':memory:' || db.memory) return null
-  const backupDir = options.backupDir ?? path.join(path.dirname(file), 'backups')
-  mkdirSync(backupDir, { recursive: true })
-  const destination = path.join(backupDir, backupFileName())
-  vacuumInto(db, destination)
-  return destination
 }
 
 /**
@@ -115,17 +89,17 @@ export function currentSchemaVersion(db: Database): string {
 
 /**
  * 执行 Postgrator 迁移：
- * 1. 文件库先 VACUUM INTO 热备份；
- * 2. BEGIN IMMEDIATE 串行化多进程迁移；
- * 3. 运行带 MD5 校验和的迁移脚本；
- * 4. 成功 COMMIT，失败 ROLLBACK 后原样抛出。
+ * 1. BEGIN IMMEDIATE 串行化多进程迁移；
+ * 2. 运行带 MD5 校验和的迁移脚本；
+ * 3. 成功 COMMIT，失败 ROLLBACK 后原样抛出。
+ *
+ * 迁移本身不做备份：日常打开台账（CLI / server / MCP 每次启动）都会走这里，
+ * 自动快照会让 `data/backups` 无限制膨胀。需要快照时显式执行 `ledger backup`。
  * @param db 已打开的数据库连接（PRAGMA 由 openDatabase 应用）
- * @param options 迁移目录与可选备份目录
+ * @param options 迁移目录
  * @returns 已应用版本列表与迁移后的 schema 版本
  */
 export async function migrateDatabase(db: Database, options: MigrateOptions): Promise<MigrateResult> {
-  backupBeforeMigration(db, options)
-
   const staged = stageMigrations(options.migrationsDir)
   const postgrator = new Postgrator({
     driver: 'sqlite3',

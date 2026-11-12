@@ -47,7 +47,7 @@ export async function createTestContext(): Promise<TestContext> {
   const dir = mkdtempSync(path.join(tmpdir(), 'ledger-storage-'))
   const file = path.join(dir, 'ledger.db')
   const db = openDatabase({ file })
-  await migrateDatabase(db, { migrationsDir: defaultMigrationsDir(), backupDir: path.join(dir, 'backups') })
+  await migrateDatabase(db, { migrationsDir: defaultMigrationsDir() })
   const runtime = createRepoRuntime(db)
   const repos = {
     contracts: new SqliteContractRepository(runtime),

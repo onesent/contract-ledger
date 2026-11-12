@@ -32,8 +32,8 @@ export interface OpenedLedger {
 /**
  * 打开（必要时创建）台账数据库并完成迁移与首次种子写入。
  *
- * 迁移前的热备份与迁移事务由 storage 层负责；种子只在字典为空时写入，
- * 因此重复调用是幂等的。任一步失败都会关闭连接后原样抛出。
+ * 迁移事务由 storage 层负责，**不做自动备份**（需要快照时用 `ledger backup`）；
+ * 种子只在字典为空时写入，因此重复调用是幂等的。任一步失败都会关闭连接后原样抛出。
  * @param options 数据目录与可选迁移目录
  * @returns 已迁移、已种子化的数据库连接与存储
  */
@@ -44,7 +44,6 @@ export async function openLedger(options: OpenLedgerOptions): Promise<OpenedLedg
   try {
     await migrateDatabase(db, {
       migrationsDir: options.migrationsDir ?? defaultMigrationsDir(),
-      backupDir: path.join(dataDir, 'backups'),
     })
     seedDefaultDictionaries(db)
     const store = createLedgerStore(db)

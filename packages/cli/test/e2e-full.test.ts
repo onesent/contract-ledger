@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process'
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -235,6 +235,21 @@ describe('CLI 全流程', () => {
     expect(typeof first['name']).toBe('string')
     expect(first['inputSchema']).toBeDefined()
     expect(first['outputSchema']).toBeDefined()
+  }, 30_000)
+
+  it('日常命令与迁移不自动备份，只有 backup 命令落地文件', async () => {
+    const runs = [
+      await runCli(['contract', 'list', '--input', '{}']),
+      await runCli(['validate']),
+      await runCli(['contract', 'list', '--input', '{}']),
+    ]
+    for (const run of runs) expect(run.exitCode).toBe(0)
+    // 每次 CLI 启动都会走迁移（openLedger），但不得留下任何快照文件
+    await expect(readdir(path.join(dataDir, 'backups'))).rejects.toThrow()
+
+    const backup = await runCli(['backup'])
+    expect(backup.exitCode).toBe(0)
+    expect(await readdir(path.join(dataDir, 'backups'))).toHaveLength(1)
   }, 30_000)
 
   it('写命令缺少幂等键被拒绝，dry-run 不改变版本', async () => {

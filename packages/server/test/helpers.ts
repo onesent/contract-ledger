@@ -31,7 +31,6 @@ export async function createAuthTestContext(): Promise<AuthTestContext> {
   const db = openDatabase({ file })
   await migrateDatabase(db, {
     migrationsDir: defaultMigrationsDir(),
-    backupDir: path.join(dir, 'backups'),
   })
   return { dir, file, db }
 }

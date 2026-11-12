@@ -80,7 +80,6 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
   try {
     await migrateDatabase(db, {
       migrationsDir: defaultMigrationsDir(),
-      backupDir: path.join(dataDir, 'backups'),
     })
     seedDefaultDictionaries(db)
     const store = createLedgerStore(db)

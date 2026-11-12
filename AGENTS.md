@@ -38,6 +38,7 @@
 9. 命令结果统一信封 `{ ok, code?, message?, hint?, details?, retryable?, data?, diff?, version?, meta }`；调用方判断 `ok`。
 10. 提交前 `npm run typecheck` 与 `npm test` 必须通过；不得放宽断言或跳过校验来「让它通过」。
 11. 不引入约定外技术：后端保持 TypeScript，前端不引入 TypeScript；不新增破坏单库一致性的旁路存储。
+12. 备份只由显式入口产生（`ledger backup` / 导出）：迁移与日常打开台账（CLI / server / MCP 每次启动）不得自动写快照，否则 `<data>/backups` 会随命令次数线性膨胀。
 
 ## 4. 命令契约
 

@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
@@ -26,13 +26,32 @@ describe('Postgrator 迁移运行器', () => {
   })
 
   it('连续迁移两次：第二次应用 0 条且版本不变', async () => {
-    const second = await migrateDatabase(ctx.db, {
-      migrationsDir: defaultMigrationsDir(),
-      backupDir: path.join(ctx.dir, 'backups'),
-    })
+    const second = await migrateDatabase(ctx.db, { migrationsDir: defaultMigrationsDir() })
     expect(second.applied).toEqual([])
     expect(second.version).toBe('1')
     expect(currentSchemaVersion(ctx.db)).toBe('1')
+  })
+
+  it('迁移（含升级）不产生任何备份文件，备份只由 ledger backup 触发', async () => {
+    const upgradeDir = path.join(ctx.dir, 'upgrade-002')
+    mkdirSync(upgradeDir, { recursive: true })
+    copyFileSync(
+      path.join(defaultMigrationsDir(), '001_init.sql'),
+      path.join(upgradeDir, '001_init.sql'),
+    )
+    writeFileSync(
+      path.join(upgradeDir, '002_extra.sql'),
+      'CREATE TABLE extra_002 (id TEXT PRIMARY KEY);',
+      'utf8',
+    )
+
+    const upgraded = await migrateDatabase(ctx.db, { migrationsDir: upgradeDir })
+    const rerun = await migrateDatabase(ctx.db, { migrationsDir: upgradeDir })
+
+    expect(upgraded.applied).toEqual([2])
+    expect(rerun.applied).toEqual([])
+    expect(existsSync(path.join(ctx.dir, 'backups'))).toBe(false)
+    expect(existsSync(path.join(path.dirname(ctx.file), 'backups'))).toBe(false)
   })
 
   it('篡改已应用迁移后校验和失败', async () => {
@@ -44,10 +63,7 @@ describe('Postgrator 迁移运行器', () => {
     writeFileSync(target, `${readFileSync(target, 'utf8')}\n-- 篡改用于触发校验和失败\n`, 'utf8')
 
     await expect(
-      migrateDatabase(ctx.db, {
-        migrationsDir: tamperedDir,
-        backupDir: path.join(ctx.dir, 'backups'),
-      }),
+      migrateDatabase(ctx.db, { migrationsDir: tamperedDir }),
     ).rejects.toThrow(/MD5 checksum failed/)
     expect(currentSchemaVersion(ctx.db)).toBe('1')
   })
@@ -68,7 +84,7 @@ describe('Postgrator 迁移运行器', () => {
     const db = openDatabase({ file })
     extraDb = db
     await expect(
-      migrateDatabase(db, { migrationsDir: badDir, backupDir: path.join(ctx.dir, 'backups') }),
+      migrateDatabase(db, { migrationsDir: badDir }),
     ).rejects.toThrow()
 
     const partial = db
@@ -94,7 +110,7 @@ describe('Postgrator 迁移运行器', () => {
     )
 
     await expect(
-      migrateDatabase(ctx.db, { migrationsDir: badDir, backupDir: path.join(ctx.dir, 'backups') }),
+      migrateDatabase(ctx.db, { migrationsDir: badDir }),
     ).rejects.toThrow()
 
     const partial = ctx.db

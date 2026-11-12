@@ -43,7 +43,6 @@ export async function createIntegrationContext(): Promise<IntegrationContext> {
   const db = openDatabase({ file })
   await migrateDatabase(db, {
     migrationsDir: defaultMigrationsDir(),
-    backupDir: path.join(dir, 'backups'),
   })
   seedDefaultDictionaries(db)
   const store = createLedgerStore(db)

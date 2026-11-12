@@ -95,7 +95,7 @@ packages/
   web/             Vue 3 前端：API 客户端、配对页、合同/人员/字典/设置页面
 data/
   ledger.db        WAL 主库（伴随 ledger.db-wal / ledger.db-shm）
-  backups/         VACUUM INTO 一致性备份
+  backups/         `ledger backup` 生成的一致性备份（迁移/日常命令不会自动写入）
 scripts/           check-runtime.mjs（运行时断言）、check-runtime.test.mjs
 ```
 
@@ -154,6 +154,7 @@ CLI 与 HTTP 等价：轮换也可调用 `POST /api/auth/tokens/:id/rotate`（�
 
 ```bash
 # 一致性热备份（VACUUM INTO + 完整性检查），默认写入 <data>/backups
+# 这是唯一的备份入口：迁移与日常命令（CLI/server/MCP 每次启动）都不产生备份文件
 node packages/cli/dist/bin.js backup --json
 
 # 导出数据集为 JSON（settings 已剔除 apiKey / baseUrl / ai.enabled）
