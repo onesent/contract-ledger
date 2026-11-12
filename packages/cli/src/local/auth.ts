@@ -14,6 +14,7 @@ import {
   type CreatedAgentToken,
   type SessionInfo,
 } from '@ledger/server'
+import { LedgerError } from '@ledger/core'
 import type { Database } from '@ledger/storage-sqlite'
 
 /** agent 令牌签发参数。 */
@@ -30,6 +31,16 @@ export interface CreateTokenOptions {
 export interface RevokeResult {
   id: string
   revoked: boolean
+}
+
+/** 令牌轮换结果：新令牌明文、新旧 id 与继承的元信息。 */
+export interface RotateResult {
+  token: string
+  id: string
+  previousId: string
+  actor: string
+  label: string
+  expiresAt: string | null
 }
 
 /**
@@ -64,6 +75,37 @@ export function listTokens(db: Database, actor?: string): AgentTokenInfo[] {
  */
 export function revokeToken(db: Database, id: string): RevokeResult {
   return { id, revoked: revokeAgentToken(db, id) }
+}
+
+/**
+ * 轮换 agent 令牌：吊销旧令牌并签发同操作者 / 标签的新令牌。
+ * 两步在同一事务内完成，旧令牌立即失效。
+ * @param db 数据库连接
+ * @param id 待轮换的 tokenId
+ * @returns 新令牌明文（仅此一次）、新旧 id 与继承的元信息
+ * @throws {LedgerError} 令牌不存在时返回 NOT_FOUND
+ */
+export function rotateToken(db: Database, id: string): RotateResult {
+  const existing = listAgentTokens(db).find((item) => item.id === id)
+  if (existing === undefined) {
+    throw new LedgerError('NOT_FOUND', `令牌不存在：${id}`)
+  }
+  const rotate = db.transaction(() => {
+    revokeAgentToken(db, id)
+    return createAgentToken(db, {
+      actor: existing.actor,
+      label: existing.label,
+    })
+  })
+  const created = rotate()
+  return {
+    token: created.token,
+    id: created.id,
+    previousId: id,
+    actor: existing.actor,
+    label: existing.label,
+    expiresAt: created.expiresAt,
+  }
 }
 
 /**

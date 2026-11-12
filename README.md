@@ -14,7 +14,7 @@
 
 ## 2. 快速开始
 
-前置：Node.js ≥ 24.18.0（`scripts/check-runtime.mjs` 会断言，SQLite 需 ≥ 3.51.3）。
+前置：Node.js ≥ 24.0.0（Node 24.x 任一版本；`scripts/check-runtime.mjs` 会断言，SQLite 需 ≥ 3.51.3）。
 
 ```bash
 npm install            # 安装 workspaces 依赖
@@ -140,12 +140,15 @@ node packages/cli/dist/bin.js auth token list --json
 # 吊销令牌（立即生效）
 node packages/cli/dist/bin.js auth token revoke --id <tokenId> --json
 
+# 轮换令牌（同一事务内吊销旧令牌并签发同操作者/标签的新令牌）
+node packages/cli/dist/bin.js auth token rotate --id <tokenId> --json
+
 # 浏览器会话：列出 / 吊销
 node packages/cli/dist/bin.js auth session list --json
 node packages/cli/dist/bin.js auth session revoke --id <sessionId> --json
 ```
 
-令牌轮换走 HTTP：`POST /api/auth/tokens/:id/rotate`（吊销旧令牌并签发新令牌）。CLI 暂无 `rotate` 子命令，可先 `revoke` 再 `create`，或调用 HTTP 端点。
+CLI 与 HTTP 等价：轮换也可调用 `POST /api/auth/tokens/:id/rotate`（服务模式），登出浏览器会话走 `POST /api/auth/logout`。
 
 ### 4.2 备份、导出与导入
 

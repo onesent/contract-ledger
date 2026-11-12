@@ -20,6 +20,7 @@ import {
   listTokens,
   revokeSessionForCli,
   revokeToken,
+  rotateToken,
 } from './local/auth.js'
 import { backupLedger } from './local/backup.js'
 import { exportLedger } from './local/export.js'
@@ -569,6 +570,18 @@ function registerAuth(program: Command): void {
       const startedAt = Date.now()
       await executeLocal('auth.token.revoke', globals, startedAt, (opened) => ({
         data: revokeToken(opened.db, options.id),
+      }))
+    })
+
+  const tokenRotate = addGlobalOptions(token.command('rotate'))
+  tokenRotate
+    .description('轮换令牌：吊销旧令牌并签发同操作者 / 标签的新令牌')
+    .requiredOption('--id <id>', '待轮换的 tokenId')
+    .action(async (options: AuthRevokeOptions, command: Command) => {
+      const globals = resolveGlobalOptions(command)
+      const startedAt = Date.now()
+      await executeLocal('auth.token.rotate', globals, startedAt, (opened) => ({
+        data: rotateToken(opened.db, options.id),
       }))
     })
 

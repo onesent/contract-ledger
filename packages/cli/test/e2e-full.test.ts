@@ -271,4 +271,36 @@ describe('CLI 全流程', () => {
     const contracts = await runCli(['query', '--sql', 'SELECT count(*) AS total FROM contracts'])
     expect(queryRows(contracts.envelope)[0]?.['total']).toBe(0)
   }, 30_000)
+
+  it('auth token create / rotate / list：旧令牌吊销，新令牌继承操作者与标签', async () => {
+    const created = await runCli([
+      'auth',
+      'token',
+      'create',
+      '--actor',
+      'agent:rotate',
+      '--label',
+      '轮换前',
+    ])
+    expect(created.exitCode).toBe(0)
+    const createdData = envelopeData(created.envelope)
+    const oldId = String(createdData['id'])
+    expect(String(createdData['token'])).toMatch(/^ldg_/)
+
+    const rotated = await runCli(['auth', 'token', 'rotate', '--id', oldId])
+    expect(rotated.exitCode).toBe(0)
+    const rotatedData = envelopeData(rotated.envelope)
+    expect(rotatedData['previousId']).toBe(oldId)
+    expect(rotatedData['actor']).toBe('agent:rotate')
+    expect(rotatedData['label']).toBe('轮换前')
+    expect(String(rotatedData['token'])).toMatch(/^ldg_/)
+    expect(String(rotatedData['id'])).not.toBe(oldId)
+
+    const listed = await runCli(['auth', 'token', 'list'])
+    expect(listed.exitCode).toBe(0)
+    const items = envelopeData(listed.envelope)['items']
+    if (!Array.isArray(items)) throw new Error('items 应为数组')
+    const oldEntry = items.map(asRecord).find((item) => item['id'] === oldId)
+    expect(oldEntry?.['revokedAt']).not.toBeNull()
+  }, 30_000)
 })
