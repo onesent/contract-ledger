@@ -3,6 +3,15 @@
  * Wave 5：认证原语（agent 令牌、浏览器会话、一次性配对码）与 Hono HTTP 服务。
  */
 export { createApp, SERVER_VERSION, setReadonly } from './app.js'
+export {
+  assertNodeSupported,
+  DEFAULT_MIN_NODE_VERSION,
+  findWorkspacePackageJson,
+  isNodeSupported,
+  parseMinNodeVersion,
+  resolveBuildInfo,
+} from './build-info.js'
+export type { BuildInfo, ResolvedBuildInfo } from './build-info.js'
 export { main, resolveServerOptions } from './main.js'
 export type { ServerCliOptions } from './main.js'
 export { DEFAULT_PORT } from './types.js'

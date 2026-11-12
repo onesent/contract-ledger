@@ -14,6 +14,7 @@ export {
   SCHEMA_VERSION_TABLE,
   currentSchemaVersion,
   defaultMigrationsDir,
+  latestMigrationVersion,
   migrateDatabase,
   vacuumInto,
 } from './migrate.js'

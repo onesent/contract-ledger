@@ -31,13 +31,14 @@ import {
   runQuery,
 } from './local/query.js'
 import { validateLedger } from './local/validate.js'
+import { resolveBuildInfo } from '@ledger/server'
 import { commandSchemaCatalog, describeCatalog, describeCommands } from './describe.js'
 import { EXIT_BUSINESS, EXIT_OK, EXIT_USAGE, exitCodeForErrorCode } from './exit-codes.js'
 import { printError, printResult } from './output.js'
 import { runCliCommand } from './run.js'
 
-/** CLI 版本号；与 packages/cli/package.json 保持一致。 */
-const CLI_VERSION = '0.0.0'
+/** CLI 版本号；与交付物、载荷 VERSION 与健康端点同源（见 @ledger/server 的 build-info）。 */
+const CLI_VERSION = resolveBuildInfo().version
 
 /** 本地服务默认地址。 */
 const DEFAULT_SERVER = 'http://127.0.0.1:4517'

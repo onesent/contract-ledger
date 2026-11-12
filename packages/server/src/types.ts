@@ -50,6 +50,10 @@ export interface AppOptions {
   allowedOrigins?: string[]
   /** 只读模式；调用方可在运行期切换该字段。 */
   readonly?: boolean
+  /** 前端构建产物目录；提供时服务同源托管页面，缺省不启用。 */
+  webDir?: string
+  /** 对外服务版本；缺省从构建信息解析（见 build-info.ts）。 */
+  version?: string
 }
 
 /** 默认监听端口。 */

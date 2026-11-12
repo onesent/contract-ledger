@@ -1,9 +1,11 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   currentSchemaVersion,
   defaultMigrationsDir,
+  latestMigrationVersion,
   migrateDatabase,
   openDatabase,
   type Database,
@@ -118,5 +120,41 @@ describe('Postgrator 迁移运行器', () => {
       .get()
     expect(partial).toBeUndefined()
     expect(currentSchemaVersion(ctx.db)).toBe('1')
+  })
+})
+
+describe('迁移版本可读与目录覆盖', () => {
+  it('latestMigrationVersion 返回目录内最大编号', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'ledger-versions-'))
+    try {
+      expect(latestMigrationVersion(dir)).toBe(0)
+      writeFileSync(path.join(dir, '001_init.sql'), 'SELECT 1;')
+      expect(latestMigrationVersion(dir)).toBe(1)
+      writeFileSync(path.join(dir, '002_add_column.sql'), 'SELECT 1;')
+      writeFileSync(path.join(dir, '010_more.sql'), 'SELECT 1;')
+      writeFileSync(path.join(dir, 'notes.txt'), 'ignored')
+      expect(latestMigrationVersion(dir)).toBe(10)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('包内默认目录包含 001_init.sql', () => {
+    expect(latestMigrationVersion(defaultMigrationsDir())).toBeGreaterThanOrEqual(1)
+  })
+
+  it('LEDGER_MIGRATIONS_DIR 覆盖默认目录', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'ledger-override-'))
+    const previous = process.env.LEDGER_MIGRATIONS_DIR
+    try {
+      process.env.LEDGER_MIGRATIONS_DIR = dir
+      expect(defaultMigrationsDir()).toBe(path.resolve(dir))
+      process.env.LEDGER_MIGRATIONS_DIR = ''
+      expect(defaultMigrationsDir()).not.toBe(path.resolve(dir))
+    } finally {
+      if (previous === undefined) delete process.env.LEDGER_MIGRATIONS_DIR
+      else process.env.LEDGER_MIGRATIONS_DIR = previous
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

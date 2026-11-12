@@ -150,6 +150,26 @@ describe('健康端点', () => {
     const body = await response.json() as Record<string, unknown>
     expect(body.writable).toBe(false)
   })
+
+  it('paired 反映是否存在有效浏览器会话', async () => {
+    const ctx = await setup()
+    const before = await ctx.app.request(`${BASE_URL}/api/health`)
+    expect((await before.json() as { paired: boolean }).paired).toBe(false)
+
+    await pairBrowser(ctx)
+
+    const after = await ctx.app.request(`${BASE_URL}/api/health`)
+    const body = await after.json() as Record<string, unknown>
+    expect(body.paired).toBe(true)
+    expect(body).not.toHaveProperty('sessions')
+  })
+
+  it('注入的版本号出现在健康端点', async () => {
+    context = await createHttpTestContext({ version: '9.9.9' })
+    const response = await context.app.request(`${BASE_URL}/api/health`)
+    const body = await response.json() as Record<string, unknown>
+    expect(body.version).toBe('9.9.9')
+  })
 })
 
 describe('认证限流', () => {

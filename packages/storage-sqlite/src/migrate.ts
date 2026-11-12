@@ -137,8 +137,31 @@ export async function migrateDatabase(db: Database, options: MigrateOptions): Pr
 
 /**
  * 包内默认迁移目录：src/ 与 dist/ 都位于包根下一层，因此上一级的 migrations 恒定。
+ * 可用 `LEDGER_MIGRATIONS_DIR` 覆盖（便携载荷与自定义部署用）。
  * @returns 绝对路径
  */
 export function defaultMigrationsDir(): string {
+  const override = process.env.LEDGER_MIGRATIONS_DIR
+  if (override !== undefined && override.trim() !== '') {
+    return path.resolve(override)
+  }
   return fileURLToPath(new URL('../migrations', import.meta.url))
+}
+
+/**
+ * 读取迁移目录内最大的迁移编号（文件名前缀数字）；无迁移文件时返回 0。
+ * 用于启动期降级保护：主库结构版本高于本程序最新迁移时拒绝启动。
+ * @param migrationsDir 迁移目录
+ * @returns 最大编号
+ */
+export function latestMigrationVersion(migrationsDir: string): number {
+  let latest = 0
+  for (const name of readdirSync(migrationsDir)) {
+    if (!name.endsWith('.sql')) continue
+    const version = /^(\d+)/.exec(name)?.[1]
+    if (version === undefined) continue
+    const value = Number.parseInt(version, 10)
+    if (Number.isSafeInteger(value) && value > latest) latest = value
+  }
+  return latest
 }

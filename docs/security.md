@@ -92,19 +92,37 @@ done
 
 ### 4.2 CSP / nosniff（T8）
 
-服务已对全部 API 响应下发基线安全头。核对：
+响应头按路径分层：`/api/*` 为纯 JSON（`default-src 'none'`、`Cache-Control: no-store`）；页面与静态资源为同源（`default-src 'self'`，允许同源脚本、同源与内联样式、同源请求与 `data:` 图片，`Cache-Control: no-cache`）。自动化证据：`middleware.test.ts`「成功与失败响应都包含 nosniff、CSP、禁止嵌入与 no-store」与 `static-hosting.test.ts`「API 路径保持最严 CSP 与不缓存」「根路径返回 index.html 并使用页面 CSP」。
 
 ```bash
-node packages/server/dist/bin.js --data ./tmp-sec &
+node packages/server/dist/bin.js --data ./tmp-sec --web-dir ./packages/web/dist &
+# API 路径：最严策略
 curl -s -D - -o /dev/null -H 'Host: 127.0.0.1:4517' http://127.0.0.1:4517/api/health
-# 预期：x-content-type-options: nosniff、x-frame-options: DENY、
-#       content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'、
+# 预期：content-security-policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'
 #       cache-control: no-store
+# 页面路径：同源策略，且不含任何外部主机
+curl -s -D - -o /dev/null -H 'Host: 127.0.0.1:4517' http://127.0.0.1:4517/
+# 预期：content-security-policy: default-src 'self'; script-src 'self'; ...（无 http(s):// 来源）
+#       cache-control: no-cache
 ```
 
-注意：当前 CSP 面向纯 JSON API（`default-src 'none'`）。若后续由同一服务托管 Vue 静态产物，需要为静态资源单独放宽至 `default-src 'self'`，不要复用这条 API CSP。
+页面策略中 `style-src 'unsafe-inline'` 的必要性：Element Plus 在运行期注入样式；`img-src data:` 的必要性：`index.html` 内联 SVG favicon。两者都不扩大脚本执行面（`script-src` 仍为 `'self'`）。
 
-### 4.3 回环绑定（T2 的另一半）
+### 4.3 同源静态托管
+
+服务在提供 `--web-dir` 时只返回构建产物，不触发命令分发、不返回业务数据；页面路径不需要业务凭证，但任何业务数据访问仍经 `/api/*` 认证链；`Host` 白名单对页面请求同样生效。自动化证据：`static-hosting.test.ts`（根路径、静态资源 Content-Type、深链回落、缺失资源 404、未知 API 401/404、Host 拒绝页面请求、未配置 webDir 时仍 404）。
+
+```bash
+# 未配置 webDir：根路径仍是 problem+json 404（不托管页面）
+node packages/server/dist/bin.js --data ./tmp-sec &
+curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: 127.0.0.1:4517' http://127.0.0.1:4517/   # 预期 404
+# 伪造 Host 访问页面：与 API 一样被拒
+curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: evil.example' http://127.0.0.1:4517/      # 预期 403
+```
+
+配对状态经健康端点以布尔 `paired` 暴露（不返回会话 id、令牌或业务数据），启动器据此决定是否展示一次性配对码。自动化证据：`middleware.test.ts`「paired 反映是否存在有效浏览器会话」。
+
+### 4.4 回环绑定（T2 的另一半）
 
 `main-options.test.ts` 只测参数解析拒绝非回环 `--host`，未起真实 socket 验证监听面。手工核对：
 

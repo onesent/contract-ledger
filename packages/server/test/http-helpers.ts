@@ -45,7 +45,9 @@ export interface BrowserCredential {
  * @param config 可选的只读模式
  * @returns 上下文；调用方必须在 afterEach 中 dispose
  */
-export async function createHttpTestContext(config: { readonly?: boolean } = {}): Promise<HttpTestContext> {
+export async function createHttpTestContext(
+  config: { readonly?: boolean; webDir?: string; version?: string } = {},
+): Promise<HttpTestContext> {
   const auth = await createAuthTestContext()
   seedDefaultDictionaries(auth.db)
   const store = createLedgerStore(auth.db)
@@ -59,6 +61,8 @@ export async function createHttpTestContext(config: { readonly?: boolean } = {})
     pairing,
     port: TEST_PORT,
     readonly: config.readonly === true,
+    webDir: config.webDir,
+    version: config.version,
   }
   const app = createApp(options)
   return {
