@@ -1,8 +1,24 @@
 import { createRequire } from 'node:module'
+import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 
+/**
+ * 读取根 package.json 的 engines.node 并取出最低版本号。
+ * 单一来源：服务端运行时校验（packages/server/src/build-info.ts）读同一字段，避免两处漂移。
+ * @returns {string} 形如 `24.0.0`
+ */
+function readMinNodeVersion() {
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  const range = pkg?.engines?.node
+  const match = typeof range === 'string' ? range.match(/(\d+)\.(\d+)\.(\d+)/) : null
+  if (match === null) {
+    throw new Error('根 package.json 缺少 engines.node（形如 ">=24.0.0"），无法断言运行时版本。')
+  }
+  return `${match[1]}.${match[2]}.${match[3]}`
+}
+
 /** Node.js 最低版本（Node 24.x 基线：better-sqlite3 13.x 的 N-API 预编译与 ESM 行为在 24.x 稳定）。 */
-export const MIN_NODE_VERSION = '24.0.0'
+export const MIN_NODE_VERSION = readMinNodeVersion()
 
 /** SQLite 最低版本（3.7.0–3.51.2 存在 WAL checkpoint 并发损坏缺陷）。 */
 export const MIN_SQLITE_VERSION = '3.51.3'

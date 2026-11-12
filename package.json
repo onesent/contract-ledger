@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "合同管理台账：本地服务 + SQLite + CLI + MCP + Vue 前端（npm workspaces monorepo）",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "workspaces": [
     "packages/*"
   ],
@@ -14,7 +17,10 @@
     "typecheck": "tsc -b --pretty false && tsc -p test/tsconfig.json --pretty false",
     "test": "vitest run",
     "test:integration": "vitest run test/integration",
-    "validate": "node scripts/check-runtime.mjs && tsc -b --pretty false && vitest run"
+    "validate": "node scripts/check-runtime.mjs && tsc -b --pretty false && vitest run",
+    "package:payload": "node scripts/package-payload.mjs",
+    "package:exe": "node scripts/build-launcher.mjs",
+    "package": "npm run typecheck && npm run build && npm run package:payload && npm run package:exe"
   },
   "devDependencies": {
     "@types/better-sqlite3": "9.6.0",

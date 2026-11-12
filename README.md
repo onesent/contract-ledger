@@ -14,16 +14,42 @@
 
 ## 2. 快速开始
 
-前置：Node.js ≥ 24.0.0（Node 24.x 任一版本；`scripts/check-runtime.mjs` 会断言，SQLite 需 ≥ 3.51.3）。
+### 2.0 分发包与快速开始（最终用户）
+
+不需要安装 Node、不需要任何安装步骤：下载一个 zip，解压后双击 `ledger.exe` 即可。
+
+```text
+ledger-<version>-win-x64.zip   唯一交付物：解压即得自包含程序目录
+ledger-<version>-win-x64.zip.sha256   校验值
+SHA256SUMS                     校验清单（只列分发包）
+```
+
+解压后目录里就是完整程序：`ledger.exe`（入口，~7MB）、`VERSION`、`node.exe`、`node_modules\`、`packages\web\dist\`、`build-info.json`、`README.txt`、`SHA256SUMS`。**zip 里就是可运行内容**，`ledger.exe` 不自解压、不往用户目录复制程序；把整个目录放到任意可写位置即可运行。
+
+`ledger.exe` 是**控制台子系统**程序：解压后在 cmd / PowerShell / Git Bash 里直接可跑 `ledger.exe --help`、`status`、`cli …`（不用 `-H windowsgui`，否则 mintty 这类纯 pty 终端下会静默无输出）。双击时系统会开一个控制台窗口，一次性配对码同时用消息框展示。
+
+程序与数据分离：程序 = 解压目录；数据默认在 `%LOCALAPPDATA%\ledger\data\`（`--portable` 则放进程序目录）。状态根按 `--install-dir` > `LEDGER_HOME` > exe 旁 `ledger.conf.json` > exe 目录便携布局 > `%LOCALAPPDATA%\ledger` 解析，首次启动后会把生效目录写进 `ledger.conf.json`，后续命令不必重复传参。详见 `docs/distribution.md` §2。
+
+```bash
+ledger.exe                      # 双击等价：后台起服 → 打开浏览器
+ledger.exe status               # 版本、程序目录、状态目录、运行状态
+ledger.exe stop                 # 停止后台服务
+ledger.exe cli <args...>        # 转发到 CLI（透传退出码）
+```
+
+首次启动会弹出一次性配对码（120 秒有效），在页面输入即可完成配对。
+
+- **升级**：新版本 zip 解压到新目录 → 旧目录 `ledger.exe stop` → 新目录 `ledger.exe`。跨版本启动会自动备份数据库到 `data\backups\upgrade-<旧版本>-<时间戳>.db`，旧目录保留可回滚。
+- **回滚**：用旧目录的 `ledger.exe` 启动；需要旧数据时用备份覆盖 `ledger.db` 并删 `-wal`/`-shm`。
+- **卸载**：`ledger.exe stop` 后直接删程序目录；需要时再删 `%LOCALAPPDATA%\ledger`。
+
+完整说明见 [`docs/distribution.md`](docs/distribution.md)。
+
+### 2.1 从源码启动本地服务
 
 ```bash
 npm install            # 安装 workspaces 依赖
 npm run typecheck      # tsc -b 编译全部 TS 包，并类型检查 test/integration
-```
-
-### 2.1 启动本地服务
-
-```bash
 node packages/server/dist/bin.js --data ./data --port 4517
 ```
 
@@ -34,7 +60,7 @@ ledger-server 已启动：http://127.0.0.1:4517
 一次性配对码：3YRUKG44（有效期 120 秒，过期时间 2026-11-12T01:59:46.869Z）
 ```
 
-浏览器打开 `http://localhost:5173`（开发模式）或托管 `packages/web/dist` 的静态地址，首次访问会跳转 `/#/pair`，粘贴终端配对码即可。开发模式由 Vite 代理 `/api` 并把出站 `Origin` 改写为服务地址。脚本化配对也可直接调用端点：
+浏览器打开 `http://127.0.0.1:4517`（服务已同源托管前端构建产物；加 `--web-dir ./packages/web/dist` 后生效），首次访问会跳转 `/#/pair`，粘贴终端配对码即可。开发模式仍可用 Vite（`npm run dev`，由 Vite 代理 `/api` 并把出站 `Origin` 改写为服务地址）。脚本化配对也可直接调用端点：
 
 ```bash
 curl -s -c cookies.txt -H 'Host: 127.0.0.1:4517' -H 'content-type: application/json' \

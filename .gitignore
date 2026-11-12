@@ -16,3 +16,10 @@ packages/*/dist/
 *.tsbuildinfo
 .env
 *.local
+
+# 构建产物（build/：可运行包、入口 exe、组装目录）与分发包（release/）
+build/
+release/
+# go build / go test 在包目录里留下的可执行文件
+launcher/*.exe
+launcher/ledger-launcher
