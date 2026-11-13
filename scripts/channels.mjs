@@ -153,6 +153,19 @@ export function renderChannelsJson(entry) {
 }
 
 /**
+ * 把任意值渲染成安全的 YAML 标量（一律单引号，内部单引号双写）。
+ *
+ * 必须做：未加引号的标量里出现「冒号 + 空格」时，YAML 会把它当成新的键——
+ * 实测 `ShortDescription: Offline contract ledger: local service ...` 被
+ * `winget validate` 判为语法错误，整份清单一提交就被打回。
+ * @param {string | number} value 原始值
+ * @returns {string} 带单引号的 YAML 标量
+ */
+export function yamlScalar(value) {
+  return `'${String(value).replaceAll("'", "''")}'`
+}
+
+/**
  * 渲染 winget 清单的四个文件。
  * @param {Record<string, any>} entry 渠道条目
  * @returns {{ file: string, content: string }[]} 文件与内容（file 为相对仓库根的 POSIX 路径）
@@ -163,82 +176,88 @@ export function renderWingetManifests(entry) {
   const dir = wingetManifestDir(version)
   const githubUrl = entry.distribution.github.url
   const repoUrl = githubUrl.split('/releases/')[0]
-  const relativeExe = `${path.posix.basename(entry.artifact, '.zip')}\\ledger.exe`
-  const header = `# 由 scripts/channels.mjs 从已发布的分发包生成，请勿手改（改生成器）。\n`
+  // Windows 路径分隔符：YAML 单引号标量里反斜杠是字面量，写进模板字符串又容易被转义吃掉，
+  // 这里用字符码拼，保证清单里出现的是真正的 `\`。
+  const winSep = String.fromCharCode(92)
+  const relativeExe = `${path.posix.basename(entry.artifact, '.zip')}${winSep}ledger.exe`
+  const dataDir = `%LOCALAPPDATA%${winSep}ledger`
+  // 清单头：第一行放 schema 声明（编辑器补全 + winget validate 不再报 Schema header not found）
+  const header = (kind) =>
+    `# yaml-language-server: $schema=https://aka.ms/winget-manifest.${kind}.${WINGET_MANIFEST_VERSION}.schema.json\n` +
+    `# 由 scripts/channels.mjs 从已发布的分发包生成，请勿手改（改生成器）。\n`
+  const q = yamlScalar
+  const tags = `Tags:\n${['contract', 'ledger', 'sqlite', 'offline', 'cli'].map((item) => `  - ${q(item)}\n`).join('')}`
+  const cnTags = `Tags:\n${['合同', '台账', 'sqlite', '离线', '命令行'].map((item) => `  - ${q(item)}\n`).join('')}`
+  const localeTail =
+    `ReleaseNotesUrl: ${q(`${repoUrl}/releases/tag/v${version}`)}\n` +
+    `ManifestType: ${q('defaultLocale')}\n` +
+    `ManifestVersion: ${q(WINGET_MANIFEST_VERSION)}\n`
 
   const versionManifest =
-    header +
-    `PackageIdentifier: ${WINGET_PACKAGE_ID}\n` +
-    `PackageVersion: ${version}\n` +
-    `DefaultLocale: en-US\n` +
-    `ManifestType: version\n` +
-    `ManifestVersion: ${WINGET_MANIFEST_VERSION}\n`
+    header('version') +
+    `PackageIdentifier: ${q(WINGET_PACKAGE_ID)}\n` +
+    `PackageVersion: ${q(version)}\n` +
+    `DefaultLocale: ${q('en-US')}\n` +
+    `ManifestType: ${q('version')}\n` +
+    `ManifestVersion: ${q(WINGET_MANIFEST_VERSION)}\n`
+
+  const localeHead = (kind) =>
+    header(kind) +
+    `PackageIdentifier: ${q(WINGET_PACKAGE_ID)}\n` +
+    `PackageVersion: ${q(version)}\n`
 
   const englishLocale =
-    header +
-    `PackageIdentifier: ${WINGET_PACKAGE_ID}\n` +
-    `PackageVersion: ${version}\n` +
-    `PackageLocale: en-US\n` +
-    `Publisher: ${publisher}\n` +
-    `PublisherUrl: ${repoUrl}\n` +
-    `PackageName: Ledger\n` +
-    `PackageUrl: ${repoUrl}\n` +
-    `License: MIT\n` +
-    `LicenseUrl: ${repoUrl}/blob/main/LICENSE\n` +
-    `ShortDescription: Offline contract ledger: local service + SQLite + CLI + MCP + Vue UI.\n` +
-    `Description: A local-first contract ledger. The program is a self-contained directory (bundled Node runtime, SQLite, CLI, MCP server and web UI); business data lives in %LOCALAPPDATA%\\ledger and is never uploaded. No admin rights required.\n` +
-    `Tags:\n` +
-    `  - contract\n` +
-    `  - ledger\n` +
-    `  - sqlite\n` +
-    `  - offline\n` +
-    `  - cli\n` +
-    `ReleaseNotesUrl: ${repoUrl}/releases/tag/v${version}\n` +
-    `ManifestType: defaultLocale\n` +
-    `ManifestVersion: ${WINGET_MANIFEST_VERSION}\n`
+    localeHead('defaultLocale') +
+    `PackageLocale: ${q('en-US')}\n` +
+    `Publisher: ${q(publisher)}\n` +
+    `PublisherUrl: ${q(repoUrl)}\n` +
+    `PackageName: ${q('Ledger')}\n` +
+    `PackageUrl: ${q(repoUrl)}\n` +
+    `License: ${q('MIT')}\n` +
+    `LicenseUrl: ${q(`${repoUrl}/blob/main/LICENSE`)}\n` +
+    `ShortDescription: ${q('Offline contract ledger: local service + SQLite + CLI + MCP + Vue UI.')}\n` +
+    `Description: ${q(
+      `A local-first contract ledger. The program is a self-contained directory (bundled Node runtime, SQLite, CLI, MCP server and web UI); business data lives in ${dataDir} and is never uploaded. No admin rights required.`,
+    )}\n` +
+    tags +
+    localeTail
 
   const chineseLocale =
-    header +
-    `PackageIdentifier: ${WINGET_PACKAGE_ID}\n` +
-    `PackageVersion: ${version}\n` +
-    `PackageLocale: zh-CN\n` +
-    `Publisher: ${publisher}\n` +
-    `PublisherUrl: ${repoUrl}\n` +
-    `PackageName: 台账\n` +
-    `PackageUrl: ${repoUrl}\n` +
-    `License: MIT\n` +
-    `LicenseUrl: ${repoUrl}/blob/main/LICENSE\n` +
-    `ShortDescription: 离线合同台账：本地服务 + SQLite + CLI + MCP + Vue 前端。\n` +
-    `Description: 本地优先的合同管理台账。程序是一个自包含目录（内置 Node 运行时、SQLite、CLI、MCP 服务与网页界面），业务数据存放在 %LOCALAPPDATA%\\ledger，不会上传。无需管理员权限。\n` +
-    `Tags:\n` +
-    `  - 合同\n` +
-    `  - 台账\n` +
-    `  - sqlite\n` +
-    `  - 离线\n` +
-    `  - 命令行\n` +
-    `ReleaseNotesUrl: ${repoUrl}/releases/tag/v${version}\n` +
-    `ManifestType: defaultLocale\n` +
-    `ManifestVersion: ${WINGET_MANIFEST_VERSION}\n`
+    localeHead('locale') +
+    `PackageLocale: ${q('zh-CN')}\n` +
+    `Publisher: ${q(publisher)}\n` +
+    `PublisherUrl: ${q(repoUrl)}\n` +
+    `PackageName: ${q('台账')}\n` +
+    `PackageUrl: ${q(repoUrl)}\n` +
+    `License: ${q('MIT')}\n` +
+    `LicenseUrl: ${q(`${repoUrl}/blob/main/LICENSE`)}\n` +
+    `ShortDescription: ${q('离线合同台账：本地服务 + SQLite + CLI + MCP + Vue 前端。')}\n` +
+    `Description: ${q(
+      `本地优先的合同管理台账。程序是一个自包含目录（内置 Node 运行时、SQLite、CLI、MCP 服务与网页界面），业务数据存放在 ${dataDir}，不会上传。无需管理员权限。`,
+    )}\n` +
+    cnTags +
+    `ReleaseNotesUrl: ${q(`${repoUrl}/releases/tag/v${version}`)}\n` +
+    `ManifestType: ${q('locale')}\n` +
+    `ManifestVersion: ${q(WINGET_MANIFEST_VERSION)}\n`
 
   // zip 安装：整个归档解压到包目录，再为嵌套 exe 建链接。
   // 启动器会解析符号链接（launcher/config.go 的 resolveExeDir），因此链接方式安装也能
   // 找到同目录的 node.exe / VERSION / node_modules。
   const installerManifest =
-    header +
-    `PackageIdentifier: ${WINGET_PACKAGE_ID}\n` +
-    `PackageVersion: ${version}\n` +
-    `InstallerType: zip\n` +
-    `NestedInstallerType: portable\n` +
+    header('installer') +
+    `PackageIdentifier: ${q(WINGET_PACKAGE_ID)}\n` +
+    `PackageVersion: ${q(version)}\n` +
+    `InstallerType: ${q('zip')}\n` +
+    `NestedInstallerType: ${q('portable')}\n` +
     `NestedInstallerFiles:\n` +
-    `  - RelativeFilePath: '${relativeExe}'\n` +
-    `    PortableCommandAlias: ${WINGET_MONIKER}\n` +
-    `Scope: user\n` +
+    `  - RelativeFilePath: ${q(relativeExe)}\n` +
+    `    PortableCommandAlias: ${q(WINGET_MONIKER)}\n` +
     `Installers:\n` +
-    `  - Architecture: x64\n` +
-    `    InstallerUrl: ${githubUrl}\n` +
-    `    InstallerSha256: ${entry.sha256.toUpperCase()}\n` +
-    `ManifestType: installer\n` +
-    `ManifestVersion: ${WINGET_MANIFEST_VERSION}\n`
+    `  - Architecture: ${q('x64')}\n` +
+    `    InstallerUrl: ${q(githubUrl)}\n` +
+    `    InstallerSha256: ${q(entry.sha256.toUpperCase())}\n` +
+    `ManifestType: ${q('installer')}\n` +
+    `ManifestVersion: ${q(WINGET_MANIFEST_VERSION)}\n`
 
   return [
     { file: `${dir}/${WINGET_PACKAGE_ID}.yaml`, content: versionManifest },

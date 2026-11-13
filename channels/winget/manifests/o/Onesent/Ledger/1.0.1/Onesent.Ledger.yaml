@@ -1,6 +1,7 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.10.0.schema.json
 # 由 scripts/channels.mjs 从已发布的分发包生成，请勿手改（改生成器）。
-PackageIdentifier: Onesent.Ledger
-PackageVersion: 1.0.1
-DefaultLocale: en-US
-ManifestType: version
-ManifestVersion: 1.10.0
+PackageIdentifier: 'Onesent.Ledger'
+PackageVersion: '1.0.1'
+DefaultLocale: 'en-US'
+ManifestType: 'version'
+ManifestVersion: '1.10.0'

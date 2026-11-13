@@ -101,38 +101,62 @@ describe('渠道清单与分发包一致', () => {
   it('winget 清单声明了 zip + 嵌套 portable，别名与相对路径正确', () => {
     expect(installerManifest).toBeDefined()
     const text = installerManifest.content
-    expect(text).toContain('InstallerType: zip')
-    expect(text).toContain('NestedInstallerType: portable')
-    expect(text).toContain('Scope: user')
+    expect(text).toContain("InstallerType: 'zip'")
+    expect(text).toContain("NestedInstallerType: 'portable'")
+    // portable 安装器由 winget 强制为 user 作用域，写 Scope 会被 validate 警告，故不写。
+    expect(text).not.toContain('Scope:')
     expect(text).toContain(`RelativeFilePath: '${channels.artifact.replace(/\.zip$/, '')}\\ledger.exe'`)
-    expect(text).toContain(`PortableCommandAlias: ${channels.winget.moniker}`)
-    expect(text).toContain(`InstallerSha256: ${channels.sha256.toUpperCase()}`)
-    expect(text).toContain('Architecture: x64')
+    expect(text).toContain(`PortableCommandAlias: '${channels.winget.moniker}'`)
+    expect(text).toContain(`InstallerSha256: '${channels.sha256.toUpperCase()}'`)
+    expect(text).toContain("Architecture: 'x64'")
   })
 
   it('每个清单都带 ManifestVersion / ManifestType，且版本号一致', () => {
     const expectedTypes = new Map([
       ['.yaml', 'version'],
       ['.locale.en-US.yaml', 'defaultLocale'],
-      ['.locale.zh-CN.yaml', 'defaultLocale'],
+      ['.locale.zh-CN.yaml', 'locale'],
       ['.installer.yaml', 'installer'],
     ])
     for (const { file, content } of manifests) {
-      expect(content).toContain(`ManifestVersion: ${WINGET_MANIFEST_VERSION}`)
-      expect(content).toContain(`PackageIdentifier: ${WINGET_PACKAGE_ID}`)
-      expect(content).toContain(`PackageVersion: ${channels.version}`)
+      expect(content).toContain(`ManifestVersion: '${WINGET_MANIFEST_VERSION}'`)
+      expect(content).toContain(`PackageIdentifier: '${WINGET_PACKAGE_ID}'`)
+      expect(content).toContain(`PackageVersion: '${channels.version}'`)
       // 从最长后缀开始匹配：`.locale.en-US.yaml` 也以 `.yaml` 结尾。
       const suffix = [...expectedTypes.keys()]
         .sort((left, right) => right.length - left.length)
         .find((key) => file.endsWith(key))
       expect(suffix, `${file} 命名不符合 winget 约定`).toBeDefined()
-      expect(content).toContain(`ManifestType: ${expectedTypes.get(suffix)}`)
+      expect(content).toContain(`ManifestType: '${expectedTypes.get(suffix)}'`)
     }
     // DefaultLocale 必须指向实际存在的本地化清单。
     const versionManifest = manifests.find((item) => item.file === `${wingetManifestDir(channels.version)}/${WINGET_PACKAGE_ID}.yaml`)
-    const locale = versionManifest.content.match(/DefaultLocale:\s*(\S+)/)?.[1]
+    const locale = versionManifest.content.match(/DefaultLocale:\s*'([^']+)'/)?.[1]
     expect(locale).toBe('en-US')
     expect(existsSync(path.join(ROOT, wingetManifestDir(channels.version), `${WINGET_PACKAGE_ID}.locale.${locale}.yaml`))).toBe(true)
+  })
+
+  it('清单里的值一律用单引号包裹（未加引号时「冒号+空格」会让 YAML 解析失败）', () => {
+    for (const { file, content } of manifests) {
+      for (const line of content.split('\n')) {
+        const match = line.match(/^(?:\s*-\s*)?([A-Za-z][A-Za-z0-9]*):\s*(.*)$/)
+        if (match === null) continue
+        const value = match[2]
+        if (value === '') continue
+        expect(value, `${file} 的 ${match[1]} 值未加引号：${value}`).toMatch(/^'.*'$/)
+      }
+    }
+  })
+
+  it('每个清单首行是 schema 声明，且类型与 ManifestType 一致', () => {
+    for (const { file, content } of manifests) {
+      const [first] = content.split('\n')
+      const header = first.match(/^# yaml-language-server: \$schema=https:\/\/aka\.ms\/winget-manifest\.([A-Za-z]+)\.([\d.]+)\.schema\.json$/)
+      expect(header, `${file} 缺少 schema 声明`).not.toBeNull()
+      expect(header[2]).toBe(WINGET_MANIFEST_VERSION)
+      const declared = content.match(/^ManifestType: '([A-Za-z]+)'$/m)?.[1]
+      expect(declared, `${file} 的 ManifestType 与 schema 类型不一致`).toBe(header[1])
+    }
   })
 
   const artifactPath = path.join('release', channels.artifact)

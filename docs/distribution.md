@@ -207,21 +207,38 @@ npm ci → typecheck → test → build → package:payload → package:exe
 清单由 `npm run package:channels` 从真实分发包生成（`channels/channels.json` + `channels/winget/manifests/**`），字段间的一致性由 `scripts/channels-drift.test.mjs` 与 `scripts/release-guard.mjs` 守护。
 
 ```yaml
-InstallerType: zip                 # 整个归档解压到包目录
-NestedInstallerType: portable      # 再为嵌套 exe 建命令别名 ledger
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.10.0.schema.json
+PackageIdentifier: 'Onesent.Ledger'
+PackageVersion: '<version>'
+InstallerType: 'zip'                 # 整个归档解压到包目录
+NestedInstallerType: 'portable'      # 再为嵌套 exe 建命令别名 ledger
 NestedInstallerFiles:
   - RelativeFilePath: 'ledger-<version>-win-x64\ledger.exe'
-    PortableCommandAlias: ledger
-Scope: user                        # 数据在 %LOCALAPPDATA%\ledger，不需要管理员权限
+    PortableCommandAlias: 'ledger'
+Installers:
+  - Architecture: 'x64'
+    InstallerUrl: '<GitHub Release 资产地址>'
+    InstallerSha256: '<大写 sha256>'
 ```
+
+两个坑已经踩过，写在这里避免重犯：
+
+- **值必须加引号**。未加引号的标量里出现「冒号 + 空格」时 YAML 会把它当成新的键：`ShortDescription: Offline contract ledger: local service ...` 直接被 `winget validate` 判为语法错误，整份清单不可提交。生成器现在一律输出单引号标量（`yamlScalar`）。
+- **本地化文件分两种类型**：`en-US`（默认语言）是 `ManifestType: defaultLocale`，其它语言（`zh-CN`）必须是 `ManifestType: locale`，且首行 schema 声明要与之一致；`portable` 安装器不接受 `Scope`，写了会被警告。
 
 提交/更新：
 
 ```bash
 winget install Microsoft.WingetCreate
+# 提交前先本地校验（与 winget-pkgs 的校验器一致，能当场构出语法/类型错误）
+winget validate --manifest channels\winget\manifests\o\Onesent\Ledger\<version>
+# 首次：直接提交仓库里的清单；后续版本用 update 由 wingetcreate 自己去取新版本
+wingetcreate submit channels\winget\manifests\o\Onesent\Ledger\<version> --token <GitHub PAT>
 wingetcreate update Onesent.Ledger --version <version> \
-  --urls https://github.com/onesent/contract-ledger/releases/download/v<version>/ledger-<version>-win-x64.zip
+  --urls https://github.com/onesent/contract-ledger/releases/download/v<version>/ledger-<version>-win-x64.zip --token <GitHub PAT>
 ```
+
+提交后是 PR 到 `microsoft/winget-pkgs`，人工审核 + 干净机安装校验，合入后才出现在 `winget search/install/upgrade` 里。
 
 要点：
 
@@ -239,7 +256,7 @@ wingetcreate update Onesent.Ledger --version <version> \
 5. 冒烟：解压 zip 到干净目录 → `ledger.exe --version` → 双击/`start` → 配对 → 建合同 → `stop` → 解压上一版 zip 到并列目录并用它启动，确认自动生成 `data\backups\upgrade-*.db` 且数据完整。
 6. 提交并打 tag：`git commit` → `git tag -a v<version> -m "v<version>"` → `git push github master:main --follow-tags`（本地分支 `master`，GitHub 仓库默认分支是 `main`）与 `git push origin master --follow-tags`（Gitee 保留为镜像仓库）。**首次以源码覆盖 GitHub 仓库时**需 `--force-with-lease`（仓库建库时只有自动生成的 LICENSE，先把需要的文件带到本地）。
 7. GitHub Actions 自动出包并发布 Release；发布后在 Gitee Release 手工上传**同一批文件**（zip / `.sha256` / `SHA256SUMS` / `-winget-manifests.zip`）。
-8. winget：用 Release 附件里的清单提交 `wingetcreate submit`（首次）或 `wingetcreate update`（后续）。若 CI 产物的 sha256 与仓库内 `channels/` 不同，用 Release 资产的校验值回填（不必下载 45MB 包）后再提交：
+8. winget：先 `winget validate --manifest channels\winget\manifests\o\Onesent\Ledger\<version>` 本地校验（必须是「清单验证成功。」，不能只有成功带警告），再用这些清单提交 `wingetcreate submit`（首次）或 `wingetcreate update`（后续）。若 CI 产物的 sha256 与仓库内 `channels/` 不同，用 Release 资产的校验值回填（不必下载 45MB 包）后再提交：
 
    ```bash
    node scripts/channels.mjs --version <version> \

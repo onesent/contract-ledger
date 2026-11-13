@@ -1,21 +1,22 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.locale.1.10.0.schema.json
 # 由 scripts/channels.mjs 从已发布的分发包生成，请勿手改（改生成器）。
-PackageIdentifier: Onesent.Ledger
-PackageVersion: 1.0.1
-PackageLocale: zh-CN
-Publisher: Onesent
-PublisherUrl: https://github.com/onesent/contract-ledger
-PackageName: 台账
-PackageUrl: https://github.com/onesent/contract-ledger
-License: MIT
-LicenseUrl: https://github.com/onesent/contract-ledger/blob/main/LICENSE
-ShortDescription: 离线合同台账：本地服务 + SQLite + CLI + MCP + Vue 前端。
-Description: 本地优先的合同管理台账。程序是一个自包含目录（内置 Node 运行时、SQLite、CLI、MCP 服务与网页界面），业务数据存放在 %LOCALAPPDATA%\ledger，不会上传。无需管理员权限。
+PackageIdentifier: 'Onesent.Ledger'
+PackageVersion: '1.0.1'
+PackageLocale: 'zh-CN'
+Publisher: 'Onesent'
+PublisherUrl: 'https://github.com/onesent/contract-ledger'
+PackageName: '台账'
+PackageUrl: 'https://github.com/onesent/contract-ledger'
+License: 'MIT'
+LicenseUrl: 'https://github.com/onesent/contract-ledger/blob/main/LICENSE'
+ShortDescription: '离线合同台账：本地服务 + SQLite + CLI + MCP + Vue 前端。'
+Description: '本地优先的合同管理台账。程序是一个自包含目录（内置 Node 运行时、SQLite、CLI、MCP 服务与网页界面），业务数据存放在 %LOCALAPPDATA%\ledger，不会上传。无需管理员权限。'
 Tags:
-  - 合同
-  - 台账
-  - sqlite
-  - 离线
-  - 命令行
-ReleaseNotesUrl: https://github.com/onesent/contract-ledger/releases/tag/v1.0.1
-ManifestType: defaultLocale
-ManifestVersion: 1.10.0
+  - '合同'
+  - '台账'
+  - 'sqlite'
+  - '离线'
+  - '命令行'
+ReleaseNotesUrl: 'https://github.com/onesent/contract-ledger/releases/tag/v1.0.1'
+ManifestType: 'locale'
+ManifestVersion: '1.10.0'
