@@ -26,7 +26,7 @@
       ref="formRef"
       :model="form"
       :rules="rules"
-      :label-width="labelWidth"
+      label-width="auto"
       :label-position="labelPosition"
       status-icon
     >
@@ -359,7 +359,6 @@ const directionLocked = computed(() => {
   return hasPayments || hasDeliveries
 })
 const dialogWidth = computed(() => (isNarrow.value ? '96%' : '900px'))
-const labelWidth = computed(() => (isNarrow.value ? '100px' : '110px'))
 const labelPosition = computed(() => (isNarrow.value ? 'top' : 'right'))
 
 function blankContract() {

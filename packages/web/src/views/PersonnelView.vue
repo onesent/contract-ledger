@@ -21,7 +21,7 @@
     </div>
 
     <el-card shadow="never" class="filter-card">
-      <el-form :inline="!isNarrow" label-position="top" class="filter-form" @submit.prevent>
+      <el-form label-position="top" class="filter-form" @submit.prevent>
         <el-form-item label="关键词">
           <el-input v-model="keyword" clearable placeholder="编号 / 姓名 / 岗位 / 手机" :prefix-icon="Search" />
         </el-form-item>
@@ -37,14 +37,12 @@
             <el-option label="离职" value="inactive" />
           </el-select>
         </el-form-item>
-        <el-form-item label=" ">
-          <el-button @click="resetFilters">
-            <el-icon><Refresh /></el-icon>
-            清除筛选
-          </el-button>
-        </el-form-item>
       </el-form>
       <div class="filter-summary">
+        <el-button size="small" @click="resetFilters">
+          <el-icon><Refresh /></el-icon>
+          清除筛选
+        </el-button>
         <span class="small muted">共 {{ filtered.length }} 人（全部 {{ ledger.data.personnel.length }} 人）</span>
       </div>
     </el-card>
@@ -170,7 +168,7 @@
       append-to-body
       destroy-on-close
     >
-      <el-form ref="formRef" :model="form" :rules="rules" :label-width="isNarrow ? '92px' : '100px'">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="auto">
         <el-row :gutter="16">
           <el-col :xs="24" :sm="12">
             <el-form-item label="人员编号" prop="code">
@@ -239,7 +237,7 @@
       <el-alert type="info" :closable="false" show-icon :title="transferTitle" style="margin-bottom: 12px">
         {{ transferHint }}
       </el-alert>
-      <el-form label-width="100px">
+      <el-form label-width="auto">
         <el-form-item label="转交给">
           <el-select v-model="transferToId" placeholder="选择在职人员" filterable style="width: 100%">
             <el-option

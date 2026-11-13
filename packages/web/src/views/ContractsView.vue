@@ -29,7 +29,7 @@
 
     <!-- 筛选区 -->
     <el-card shadow="never" class="filter-card">
-      <el-form :model="filters" :inline="!isNarrow" label-position="top" class="filter-form" @submit.prevent>
+      <el-form :model="filters" label-position="top" class="filter-form" @submit.prevent>
         <el-form-item label="关键词">
           <el-input
             v-model="filters.keyword"
@@ -56,11 +56,6 @@
             <el-option v-for="item in statusOptions" :key="item.code" :label="item.name" :value="item.code" />
           </el-select>
         </el-form-item>
-        <el-form-item label="负责人">
-          <el-select v-model="filters.ownerIds" multiple collapse-tags collapse-tags-tooltip clearable placeholder="全部负责人">
-            <el-option v-for="item in ownerFilterOptions" :key="item.value" :label="item.label" :value="item.value" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="签订日期">
           <el-date-picker
             v-model="signedRange"
@@ -85,39 +80,42 @@
             unlink-panels
           />
         </el-form-item>
+        <el-form-item label="负责人">
+          <el-select v-model="filters.ownerIds" multiple collapse-tags collapse-tags-tooltip clearable placeholder="全部负责人">
+            <el-option v-for="item in ownerFilterOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="金额区间（元）">
-          <div class="toolbar">
-            <el-input-number v-model="filters.amountMin" :min="0" :step="1000" :controls="false" placeholder="最小" class="is-range-input" />
-            <span class="muted">—</span>
-            <el-input-number v-model="filters.amountMax" :min="0" :step="1000" :controls="false" placeholder="最大" class="is-range-input" />
+          <div class="range-inputs">
+            <el-input-number v-model="filters.amountMin" :min="0" :step="1000" :controls="false" placeholder="最小" />
+            <span class="range-sep">—</span>
+            <el-input-number v-model="filters.amountMax" :min="0" :step="1000" :controls="false" placeholder="最大" />
           </div>
         </el-form-item>
         <el-form-item :label="`${funding.progress}（%）`">
-          <div class="toolbar">
-            <el-input-number v-model="filters.progressMin" :min="0" :max="100" :step="10" :controls="false" placeholder="最小" class="is-range-input" />
-            <span class="muted">—</span>
-            <el-input-number v-model="filters.progressMax" :min="0" :max="100" :step="10" :controls="false" placeholder="最大" class="is-range-input" />
+          <div class="range-inputs">
+            <el-input-number v-model="filters.progressMin" :min="0" :max="100" :step="10" :controls="false" placeholder="最小" />
+            <span class="range-sep">—</span>
+            <el-input-number v-model="filters.progressMax" :min="0" :max="100" :step="10" :controls="false" placeholder="最大" />
           </div>
         </el-form-item>
         <el-form-item label="交付进度（%）">
-          <div class="toolbar">
-            <el-input-number v-model="filters.deliveryMin" :min="0" :max="100" :step="10" :controls="false" placeholder="最小" class="is-range-input" />
-            <span class="muted">—</span>
-            <el-input-number v-model="filters.deliveryMax" :min="0" :max="100" :step="10" :controls="false" placeholder="最大" class="is-range-input" />
+          <div class="range-inputs">
+            <el-input-number v-model="filters.deliveryMin" :min="0" :max="100" :step="10" :controls="false" placeholder="最小" />
+            <span class="range-sep">—</span>
+            <el-input-number v-model="filters.deliveryMax" :min="0" :max="100" :step="10" :controls="false" placeholder="最大" />
           </div>
         </el-form-item>
         <el-form-item :label="`有${funding.unpaid}`">
           <el-switch v-model="filters.hasUnpaid" inline-prompt :active-text="unpaidShortText" inactive-text="全部" />
         </el-form-item>
-        <el-form-item label=" ">
-          <el-button @click="resetFilters">
-            <el-icon><Refresh /></el-icon>
-            清除筛选
-          </el-button>
-        </el-form-item>
       </el-form>
 
       <div class="filter-summary">
+        <el-button size="small" @click="resetFilters">
+          <el-icon><Refresh /></el-icon>
+          清除筛选
+        </el-button>
         <span class="small muted">
           共 {{ paginationTotal }} 条（本方向全部 {{ directionContracts.length }} 条）
           <span v-if="clientFilterActive">· 快捷 / 区间筛选在当前页内细化</span>
@@ -335,7 +333,7 @@
         {{ formatMoney(paymentContract.receivedAmount, precision) }}，剩余
         <b>{{ formatMoney(paymentRemaining, precision) }}</b>
       </el-alert>
-      <el-form ref="paymentFormRef" :model="paymentForm" :rules="paymentFormRules" label-width="92px">
+      <el-form ref="paymentFormRef" :model="paymentForm" :rules="paymentFormRules" label-width="auto">
         <el-form-item :label="`${funding.verb}金额`" prop="amount">
           <el-input-number
             v-model="paymentForm.amount"
@@ -385,7 +383,7 @@
         {{ formatMoney(deliveryContract.deliveredAmount, precision) }}，剩余可交付
         <b>{{ formatMoney(deliveryRemaining, precision) }}</b>
       </el-alert>
-      <el-form ref="deliveryFormRef" :model="deliveryForm" :rules="deliveryFormRules" label-width="102px">
+      <el-form ref="deliveryFormRef" :model="deliveryForm" :rules="deliveryFormRules" label-width="auto">
         <el-form-item label="交付日期" prop="date">
           <el-date-picker
             v-model="deliveryForm.date"

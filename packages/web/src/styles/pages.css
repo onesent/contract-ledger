@@ -144,20 +144,80 @@
 }
 
 .filter-card .el-card__body {
-  padding: 14px 16px 2px;
+  padding: 14px 16px;
+}
+
+/*
+ * 筛选与表单的栅格基础：标签在上、控件等宽。
+ * 列宽由 minmax(20rem, 1fr) 与容器宽度决定，不写死像素或列数：
+ * 宽屏自动多列，窄屏自动变单列，跨行与跨页的左边缘天然对齐。
+ * （不用 el-form 的 inline 模式——inline 下宽度由内容决定，日期区间 ~350px、
+ * 开关 ~50px，换行后左右边缘必然参差。）
+ */
+.filter-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  column-gap: 16px;
+  row-gap: 12px;
+  align-items: start;
 }
 
 .filter-form .el-form-item {
-  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  min-width: 0;
+}
+
+.filter-form .el-form-item__label {
+  height: auto;
+  padding: 0 0 4px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ledger-muted);
+}
+
+.filter-form .el-form-item__content {
+  width: 100%;
+  min-width: 0;
+  margin-left: 0;
+  line-height: normal;
 }
 
 .filter-form .el-input,
-.filter-form .el-select {
-  width: 180px;
+.filter-form .el-select,
+.filter-form .el-cascader,
+.filter-form .el-input-number,
+.filter-form .el-date-editor {
+  width: 100%;
 }
 
-.filter-form .el-input.is-range-input {
-  width: 120px;
+/* 日期区间默认 min-width 350px，会撑破单格，这里放开 */
+.filter-form .el-date-editor.el-range-editor {
+  min-width: 0;
+}
+
+.filter-form .el-range-editor .el-range-input {
+  min-width: 0;
+}
+
+/* 区间输入（最小 — 最大）在一格里等分，不换行、不错位 */
+.filter-form .range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.filter-form .range-inputs > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.filter-form .range-inputs > .range-sep {
+  flex: 0 0 auto;
+  color: var(--ledger-muted);
 }
 
 .filter-summary {
@@ -165,7 +225,9 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 4px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--el-border-color-lighter);
 }
 
 .filter-tag {
@@ -464,16 +526,71 @@
   padding-top: 16px;
 }
 
+/*
+ * 设置表单同样是自适应栅格：标签在上、控件填满所在单元格，
+ * 不再给每个控件写 240px / 180px 之类的固定宽度。
+ */
 .settings-form {
-  max-width: 760px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  column-gap: 20px;
+  row-gap: 14px;
+  align-items: start;
 }
 
-.settings-form .el-input-number {
-  width: 180px;
+/* 同一页面的第二个表单与主表单保持同一间距 */
+.settings-form-sub {
+  margin-top: 14px;
 }
 
-.settings-form .el-input {
-  max-width: 420px;
+.settings-form .el-form-item {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  min-width: 0;
+}
+
+.settings-form .el-form-item__label {
+  height: auto;
+  padding: 0 0 4px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ledger-muted);
+}
+
+.settings-form .el-form-item__content {
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  min-width: 0;
+  margin-left: 0;
+}
+
+.settings-form .el-input,
+.settings-form .el-select,
+.settings-form .el-input-number,
+.settings-form .el-textarea {
+  width: 100%;
+  max-width: 100%;
+}
+
+.settings-form .form-tip {
+  margin: 2px 0 0;
+}
+
+/* 开关 + 附属输入纵向堆叠，宽度跟随单元格 */
+.settings-form .field-stack {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.settings-form .field-stack > .el-input,
+.settings-form .field-stack > .el-input-number {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .form-tip {
@@ -495,21 +612,6 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-
-.tab-actions {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.dict-tabs-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  flex-wrap: wrap;
 }
 
 /* ---------- AI ---------- */
@@ -586,25 +688,6 @@
     font-size: 17px;
   }
 
-  .filter-form .el-input,
-  .filter-form .el-select,
-  .filter-form .el-date-editor {
-    width: 100%;
-  }
-
-  .filter-form .el-form-item {
-    width: 100%;
-    margin-right: 0;
-  }
-
-  .filter-form .el-form-item__content {
-    width: 100%;
-  }
-
-  .filter-form .el-form-item__content > * {
-    width: 100%;
-  }
-
   .pagination-bar {
     justify-content: center;
     padding: 10px 8px;
@@ -618,12 +701,6 @@
 
   .toolbar .el-button {
     margin-left: 0;
-  }
-
-  .settings-form .el-input-number,
-  .settings-form .el-input {
-    width: 100%;
-    max-width: 100%;
   }
 }
 

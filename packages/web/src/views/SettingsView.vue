@@ -59,7 +59,7 @@
         ref="generalFormRef"
         :model="general"
         :rules="generalRules"
-        :label-width="isNarrow ? '140px' : '170px'"
+        label-position="top"
         class="settings-form"
       >
         <el-form-item label="操作人名称" prop="operatorName">
@@ -88,7 +88,7 @@
         </el-form-item>
         <el-form-item label="合同编号自动生成">
           <el-switch v-model="general.autoNoEnabled" inline-prompt active-text="开启" inactive-text="关闭" />
-          <div style="width: 100%; margin-top: 8px">
+          <div class="field-stack">
             <el-input
               v-model="general.autoNoPattern"
               :disabled="!general.autoNoEnabled"
@@ -102,7 +102,7 @@
         </el-form-item>
         <el-form-item label="自动备份提醒">
           <el-switch v-model="general.autoBackupEnabled" inline-prompt active-text="开启" inactive-text="关闭" />
-          <div style="width: 100%; margin-top: 8px">
+          <div class="field-stack">
             <el-input-number
               v-model="general.autoBackupDays"
               :min="1"
@@ -155,12 +155,12 @@
         API Key 与 Base URL 不会出现在导出备份中。
       </el-alert>
 
-      <el-form :model="aiForm" label-width="130px" class="settings-form" style="margin-top: 14px">
+      <el-form :model="aiForm" label-position="top" class="settings-form settings-form-sub">
         <el-form-item label="总开关">
           <el-switch v-model="aiForm.enabled" inline-prompt active-text="启用" inactive-text="关闭" />
         </el-form-item>
         <el-form-item label="服务商">
-          <el-select v-model="aiForm.provider" style="width: 260px">
+          <el-select v-model="aiForm.provider">
             <el-option v-for="item in aiProviders" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
@@ -184,7 +184,7 @@
           <el-input-number v-model="aiForm.timeout" :min="5" :max="120" :step="5" controls-position="right" />
         </el-form-item>
         <el-form-item label="温度">
-          <el-slider v-model="aiForm.temperature" :min="0" :max="1" :step="0.1" show-input style="max-width: 420px" />
+          <el-slider v-model="aiForm.temperature" :min="0" :max="1" :step="0.1" show-input />
         </el-form-item>
       </el-form>
 

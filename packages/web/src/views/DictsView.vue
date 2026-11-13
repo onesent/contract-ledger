@@ -165,7 +165,7 @@
       append-to-body
       destroy-on-close
     >
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="auto">
         <el-form-item label="所属分类">
           <el-input :model-value="activeCategoryName" disabled />
         </el-form-item>
@@ -202,7 +202,7 @@
 
     <!-- 新增分类 -->
     <el-dialog v-model="categoryVisible" title="新增字典分类" :width="isNarrow ? '96%' : '440px'" append-to-body>
-      <el-form ref="categoryFormRef" :model="categoryForm" :rules="categoryRules" label-width="90px">
+      <el-form ref="categoryFormRef" :model="categoryForm" :rules="categoryRules" label-width="auto">
         <el-form-item label="分类编码" prop="code">
           <el-input v-model="categoryForm.code" maxlength="40" placeholder="例如 projectStage" />
         </el-form-item>
