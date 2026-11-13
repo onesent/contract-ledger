@@ -2,8 +2,8 @@
   "schema": 1,
   "version": "1.0.1",
   "artifact": "ledger-1.0.1-win-x64.zip",
-  "sizeBytes": 46959625,
-  "sha256": "06450a062ed70449d70f2f6f143291d1505a6b7d6222d83ff38259bec45237cf",
+  "sizeBytes": 46959629,
+  "sha256": "2738a9fd535c8355958ad3ca10a265eb2a6330962c8de77d447a20bf3f1faeb1",
   "distribution": {
     "github": {
       "repository": "onesent/contract-ledger",
@@ -21,7 +21,7 @@
     "moniker": "ledger",
     "version": "1.0.1",
     "installerUrl": "https://github.com/onesent/contract-ledger/releases/download/v1.0.1/ledger-1.0.1-win-x64.zip",
-    "installerSha256": "06450a062ed70449d70f2f6f143291d1505a6b7d6222d83ff38259bec45237cf",
+    "installerSha256": "2738a9fd535c8355958ad3ca10a265eb2a6330962c8de77d447a20bf3f1faeb1",
     "manifestDir": "channels/winget/manifests/o/Onesent/Ledger/1.0.1"
   }
 }
