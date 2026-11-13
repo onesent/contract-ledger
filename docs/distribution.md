@@ -133,6 +133,20 @@ ledger-1.1.0-win-x64\ledger.exe
 
 设计取自成熟开源实现：syncthing 升级时先校验再替换、保留旧二进制以便回退；VS Code 便携模式把程序与数据分开、升级即替换程序目录；rclone `selfupdate` 保留「回到旧版本」的能力。本仓库**运行期不发任何网络请求**（AGENTS §3.4），因此不做自动下载：新版本 zip 由用户/发版人提供。
 
+### 4.1 用户侧怎么知道、怎么更新
+
+程序不会自动检查更新（运行期零网络），所以「得知新版本」取决于安装方式：
+
+| 安装方式 | 得知新版本 | 更新动作 | 注意 |
+| --- | --- | --- | --- |
+| 手动解压 zip（GitHub / Gitee） | Watch 仓库的 Releases，或对比 `docs/distribution.md` 里的版本号 | 下载新 zip → 解压到新目录 → **直接双击新目录的 `ledger.exe`** | 不用先手工停旧服：启动器发现旧服在跑会先停掉它；旧目录保留即可回滚 |
+| winget | `winget upgrade`（有新版清单时列出） | `ledger.exe stop` → `winget upgrade Onesent.Ledger` | winget 清单由发版人提 PR，合入有 1–7 天审核延迟；服务未停时包目录被占用，替换可能失败 |
+| 离线介质（U 盘等） | 发版人通知 | 同上「手动解压 zip」 | 若用 `--portable` 把数据放在程序目录内，升级时要确保数据随目录一起迁移 |
+
+无论哪条路径，用户都不需要做数据迁移：数据始终在状态根（默认 `%LOCALAPPDATA%\ledger`），跨版本首次启动自动生成 `data\backups\upgrade-<旧版本>-<时间戳>.db`。`ledger.exe status` 会显示「上次运行」的版本与目录，用来确认当前跑的是哪一版。
+
+重装旧版（winget）：winget-pkgs 保留历史清单，`winget install Onesent.Ledger --version 1.0.0` 可装回指定版本；数据回滚仍需按 §5 用升级前备份覆盖数据库。
+
 ## 5. 回滚
 
 ```bat
