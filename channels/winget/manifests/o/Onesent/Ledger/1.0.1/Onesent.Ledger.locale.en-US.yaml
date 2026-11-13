@@ -1,6 +1,6 @@
 # 由 scripts/channels.mjs 从已发布的分发包生成，请勿手改（改生成器）。
 PackageIdentifier: Onesent.Ledger
-PackageVersion: 1.0.0
+PackageVersion: 1.0.1
 PackageLocale: en-US
 Publisher: Onesent
 PublisherUrl: https://github.com/onesent/contract-ledger
@@ -16,6 +16,6 @@ Tags:
   - sqlite
   - offline
   - cli
-ReleaseNotesUrl: https://github.com/onesent/contract-ledger/releases/tag/v1.0.0
+ReleaseNotesUrl: https://github.com/onesent/contract-ledger/releases/tag/v1.0.1
 ManifestType: defaultLocale
 ManifestVersion: 1.10.0

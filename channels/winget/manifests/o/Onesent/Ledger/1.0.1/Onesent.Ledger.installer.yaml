@@ -1,15 +1,15 @@
 # 由 scripts/channels.mjs 从已发布的分发包生成，请勿手改（改生成器）。
 PackageIdentifier: Onesent.Ledger
-PackageVersion: 1.0.0
+PackageVersion: 1.0.1
 InstallerType: zip
 NestedInstallerType: portable
 NestedInstallerFiles:
-  - RelativeFilePath: 'ledger-1.0.0-win-x64\ledger.exe'
+  - RelativeFilePath: 'ledger-1.0.1-win-x64\ledger.exe'
     PortableCommandAlias: ledger
 Scope: user
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/onesent/contract-ledger/releases/download/v1.0.0/ledger-1.0.0-win-x64.zip
-    InstallerSha256: EC47E0AC2D09FF7216DB0A66828672DE45438DC2A749C9245151F4C3C0991BBA
+    InstallerUrl: https://github.com/onesent/contract-ledger/releases/download/v1.0.1/ledger-1.0.1-win-x64.zip
+    InstallerSha256: 06450A062ED70449D70F2F6F143291D1505A6B7D6222D83FF38259BEC45237CF
 ManifestType: installer
 ManifestVersion: 1.10.0

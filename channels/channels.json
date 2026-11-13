@@ -1,27 +1,27 @@
 {
   "schema": 1,
-  "version": "1.0.0",
-  "artifact": "ledger-1.0.0-win-x64.zip",
-  "sizeBytes": 46959530,
-  "sha256": "ec47e0ac2d09ff7216db0a66828672de45438dc2a749c9245151f4c3c0991bba",
+  "version": "1.0.1",
+  "artifact": "ledger-1.0.1-win-x64.zip",
+  "sizeBytes": 46959625,
+  "sha256": "06450a062ed70449d70f2f6f143291d1505a6b7d6222d83ff38259bec45237cf",
   "distribution": {
     "github": {
       "repository": "onesent/contract-ledger",
-      "tag": "v1.0.0",
-      "url": "https://github.com/onesent/contract-ledger/releases/download/v1.0.0/ledger-1.0.0-win-x64.zip"
+      "tag": "v1.0.1",
+      "url": "https://github.com/onesent/contract-ledger/releases/download/v1.0.1/ledger-1.0.1-win-x64.zip"
     },
     "gitee": {
       "repository": "sentone/contract-ledger",
-      "tag": "v1.0.0",
-      "url": "https://gitee.com/sentone/contract-ledger/releases/download/v1.0.0/ledger-1.0.0-win-x64.zip"
+      "tag": "v1.0.1",
+      "url": "https://gitee.com/sentone/contract-ledger/releases/download/v1.0.1/ledger-1.0.1-win-x64.zip"
     }
   },
   "winget": {
     "packageIdentifier": "Onesent.Ledger",
     "moniker": "ledger",
-    "version": "1.0.0",
-    "installerUrl": "https://github.com/onesent/contract-ledger/releases/download/v1.0.0/ledger-1.0.0-win-x64.zip",
-    "installerSha256": "ec47e0ac2d09ff7216db0a66828672de45438dc2a749c9245151f4c3c0991bba",
-    "manifestDir": "channels/winget/manifests/o/Onesent/Ledger/1.0.0"
+    "version": "1.0.1",
+    "installerUrl": "https://github.com/onesent/contract-ledger/releases/download/v1.0.1/ledger-1.0.1-win-x64.zip",
+    "installerSha256": "06450a062ed70449d70f2f6f143291d1505a6b7d6222d83ff38259bec45237cf",
+    "manifestDir": "channels/winget/manifests/o/Onesent/Ledger/1.0.1"
   }
 }
